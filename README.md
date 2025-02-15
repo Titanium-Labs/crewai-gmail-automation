@@ -2,7 +2,12 @@
 
 ![Gmail Automation](./assets/gmail-automation.jpg)
 
-This project uses [CrewAI](https://crewai.com) to automate Gmail inbox management through a multi-agent system. The agents work together to categorize, organize, and respond to emails intelligently.
+This project uses [CrewAI](https://crewai.com) to automate Gmail inbox management through a multi-agent system. 
+
+The agents work together to:
+- **categorize emails**
+- **organize emails**
+- **generate intelligent response drafts** (drafts are saved in your Gmail `drafts` folder)
 
 ## Features
 
