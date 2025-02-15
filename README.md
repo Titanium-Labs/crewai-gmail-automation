@@ -1,5 +1,7 @@
 # Gmail Automation with CrewAI
 
+![Gmail Automation](./assets/gmail-automation.jpg)
+
 This project uses [CrewAI](https://crewai.com) to automate Gmail inbox management through a multi-agent system. The agents work together to categorize, organize, and respond to emails intelligently.
 
 ## Features
@@ -47,7 +49,7 @@ This project uses [CrewAI](https://crewai.com) to automate Gmail inbox managemen
 
 3. **Configuration:**
    Create a `.env` file with:
-   ```toml
+   ```text
    GEMINI_API_KEY=your_key_here (YOU CAN USE OPENAI_API_KEY AS WELL)
    EMAIL_ADDRESS=your.email@gmail.com
    APP_PASSWORD=your_gmail_app_password
