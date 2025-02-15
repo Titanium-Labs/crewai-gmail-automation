@@ -7,21 +7,21 @@ This project uses [CrewAI](https://crewai.com) to automate Gmail inbox managemen
 ## Features
 
 - **Smart Email Categorization:**
-  - SOCIALS (LinkedIn, Community updates)
-  - GITHUB (Repository notifications, Security alerts)
-  - RECEIPTS_INVOICES (Purchases, Billing)
-  - PROMOTIONS (Marketing, Sales)
-  - NEWSLETTERS (Updates, Digests)
-  - RECRUITMENT (Job opportunities)
-  - SPONSORSHIPS (Partnership offers)
-  - PERSONAL (Direct communications)
-  - EVENT_INVITATIONS (Webinars, Conferences)
-  - COLD_EMAIL (Unsolicited pitches)
+  - `SOCIALS` (LinkedIn, Community updates)
+  - `GITHUB` (Repository notifications, Security alerts)
+  - `RECEIPTS_INVOICES` (Purchases, Billing)
+  - `PROMOTIONS` (Marketing, Sales)
+  - `NEWSLETTERS` (Updates, Digests)
+  - `RECRUITMENT` (Job opportunities)
+  - `SPONSORSHIPS` (Partnership offers)
+  - `PERSONAL` (Direct communications)
+  - `EVENT_INVITATIONS` (Webinars, Conferences)
+  - `COLD_EMAIL` (Unsolicited pitches)
 
 - **Priority-based Organization:**
-  - HIGH: Response within 24 hours
-  - MEDIUM: Handle within 48-72 hours
-  - LOW: Handle when convenient
+  - `HIGH`: Response within 24 hours
+  - `MEDIUM`: Handle within 48-72 hours
+  - `LOW`: Handle when convenient
 
 - **Automated Responses:**
   - Context-aware reply drafts
@@ -32,7 +32,7 @@ This project uses [CrewAI](https://crewai.com) to automate Gmail inbox managemen
 ## Installation
 
 1. **Prerequisites:**
-   - Python >=3.10 <3.13
+   - Python `>=3.10 <3.13`
    - Gmail account with IMAP enabled; create an app password here: (https://myaccount.google.com/u/3/apppasswords)
    - App password for Gmail
 
@@ -49,18 +49,18 @@ This project uses [CrewAI](https://crewai.com) to automate Gmail inbox managemen
 
 3. **Configuration:**
    Create a `.env` file with:
-   ```text
-   GEMINI_API_KEY=your_key_here (YOU CAN USE OPENAI_API_KEY AS WELL)
-   EMAIL_ADDRESS=your.email@gmail.com
-   APP_PASSWORD=your_gmail_app_password
-   ```
+    ```text
+    GEMINI_API_KEY=your_key_here (YOU CAN USE OPENAI_API_KEY AS WELL)
+    EMAIL_ADDRESS=your.email@gmail.com
+    APP_PASSWORD=your_gmail_app_password
+    ```
 
 ## Usage
 
 Run the automation:
-```bash
-crewai run
-```
+    ```bash
+    crewai run
+    ```
 
 The system will:
 1. Fetch unread emails
