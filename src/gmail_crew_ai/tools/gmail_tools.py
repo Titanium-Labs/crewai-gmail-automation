@@ -10,6 +10,28 @@ from pydantic import BaseModel, Field
 from crewai.tools import tool
 import time
 
+def decode_header_safe(header):
+    """
+    Safely decode email headers that might contain encoded words or non-ASCII characters.
+    """
+    if not header:
+        return ""
+    
+    try:
+        decoded_parts = []
+        for decoded_str, charset in decode_header(header):
+            if isinstance(decoded_str, bytes):
+                if charset:
+                    decoded_parts.append(decoded_str.decode(charset or 'utf-8', errors='replace'))
+                else:
+                    decoded_parts.append(decoded_str.decode('utf-8', errors='replace'))
+            else:
+                decoded_parts.append(str(decoded_str))
+        return ' '.join(decoded_parts)
+    except Exception as e:
+        # Fallback to raw header if decoding fails
+        return str(header)
+
 def clean_email_body(email_body: str) -> str:
     """
     Clean the email body by removing HTML tags and excessive whitespace.
@@ -118,11 +140,11 @@ class GetUnreadEmailsSchema(BaseModel):
     )
 
 class GetUnreadEmailsTool(GmailToolBase):
-    """Tool to retrieve unread emails from Gmail."""
+    """Tool to get unread emails from Gmail."""
     name: str = "get_unread_emails"
-    description: str = "Retrieves most recent unread emails from the user's Gmail inbox. Can limit the number of emails retrieved."
+    description: str = "Gets unread emails from Gmail"
     args_schema: Type[BaseModel] = GetUnreadEmailsSchema
-
+    
     def _run(self, limit: Optional[int] = 5) -> List[Tuple[str, str, str, str, Dict]]:
         mail = self._connect()
         try:
@@ -147,25 +169,12 @@ class GetUnreadEmailsTool(GmailToolBase):
                 msg = email.message_from_bytes(raw_email)
 
                 # Decode headers properly (handles encoded characters)
-                def decode_header_safe(header):
-                    try:
-                        decoded_header = decode_header(header)
-                        parts = []
-                        for value, charset in decoded_header:
-                            if isinstance(value, bytes):
-                                try:
-                                    parts.append(value.decode(charset or 'utf-8', errors='ignore'))
-                                except LookupError:
-                                    parts.append(value.decode('utf-8', errors='ignore')) #Try utf-8 if charset lookup fails
-                            else:
-                                parts.append(str(value))
-                        return ''.join(parts)
-                    except Exception as e:
-                        print(f"Error decoding header: {e}")
-                        return str(header) # Return original header on decode failure
-
                 subject = decode_header_safe(msg["Subject"])
                 sender = decode_header_safe(msg["From"])
+                
+                # Extract and standardize the date
+                date_str = msg.get("Date", "")
+                received_date = self._parse_email_date(date_str)
                 
                 # Get the current message body
                 current_body = self._extract_body(msg)
@@ -181,15 +190,41 @@ class GetUnreadEmailsTool(GmailToolBase):
                     'message_id': msg.get('Message-ID', ''),
                     'in_reply_to': msg.get('In-Reply-To', ''),
                     'references': msg.get('References', ''),
-                    'date': msg.get('Date', ''),
-                    'thread_messages': self._get_thread_messages(mail, msg)
+                    'date': received_date,  # Use standardized date
+                    'raw_date': date_str,   # Keep original date string
+                    'email_id': email_id.decode('utf-8')
                 }
 
-                emails.append((subject, sender, full_body, email_id, thread_info))
+                # Add a clear date indicator in the body for easier extraction
+                full_body = f"EMAIL DATE: {received_date}\n\n{full_body}"
+                
+                emails.append((subject, sender, full_body, email_id.decode('utf-8'), thread_info))
 
             return emails
         finally:
             self._disconnect(mail)
+
+    def _parse_email_date(self, date_str: str) -> str:
+        """
+        Parse email date string into a standardized format.
+        Returns ISO format date string (YYYY-MM-DD) or empty string if parsing fails.
+        """
+        if not date_str:
+            return ""
+        
+        try:
+            # Try various date formats commonly found in emails
+            # Remove timezone name if present (like 'EDT', 'PST')
+            date_str = re.sub(r'\s+\([A-Z]{3,4}\)', '', date_str)
+            
+            # Parse with email.utils
+            parsed_date = email.utils.parsedate_to_datetime(date_str)
+            if parsed_date:
+                return parsed_date.strftime("%Y-%m-%d")
+        except Exception as e:
+            print(f"Error parsing date '{date_str}': {e}")
+        
+        return ""
 
 class SaveDraftSchema(BaseModel):
     """Schema for SaveDraftTool input."""
@@ -206,9 +241,14 @@ class SaveDraftTool(GmailToolBase):
 
     def _format_body(self, body: str) -> str:
         """Format the email body with signature."""
-        if "[Your Name]" in body:
-            return body.replace("[Your Name]", "Tony Kipkemboi")
-        return f"{body}\n\nBest regards,\nTony Kipkemboi"
+        # Replace [Your name] or [Your Name] with Tony Kipkemboi
+        body = re.sub(r'\[Your [Nn]ame\]', 'Tony Kipkemboi', body)
+        
+        # If no placeholder was found, append the signature
+        if '[Your' not in body and '[your' not in body:
+            body = f"{body}\n\nBest regards,\nTony Kipkemboi"
+        
+        return body
 
     def _run(self, subject: str, body: str, recipient: str, thread_info: Optional[Dict] = None) -> str:
         mail = self._connect()
@@ -305,5 +345,40 @@ class GmailOrganizeTool(GmailToolBase):
 
         except Exception as e:
             return f"Error organizing email: {e}"
+        finally:
+            self._disconnect(mail)
+
+class GmailDeleteSchema(BaseModel):
+    """Schema for GmailDeleteTool input."""
+    email_id: str = Field(..., description="Email ID to delete")
+    reason: str = Field(..., description="Reason for deletion")
+
+class GmailDeleteTool(GmailToolBase):
+    """Tool to delete emails from Gmail."""
+    name: str = "delete_email"
+    description: str = "Moves emails to trash that are no longer needed"
+    args_schema: Type[BaseModel] = GmailDeleteSchema
+
+    def _run(self, email_id: str, reason: str) -> str:
+        mail = self._connect()
+        try:
+            mail.select("INBOX")
+            
+            # First verify the email exists and get its details for logging
+            result, data = mail.fetch(email_id, "(RFC822)")
+            if result != "OK" or not data or data[0] is None:
+                return f"Error: Email with ID {email_id} not found"
+                
+            msg = email.message_from_bytes(data[0][1])
+            subject = decode_header_safe(msg["Subject"])
+            sender = decode_header_safe(msg["From"])
+            
+            # Move to Trash
+            mail.store(email_id, '+X-GM-LABELS', '\\Trash')
+            mail.store(email_id, '-X-GM-LABELS', '\\Inbox')
+            
+            return f"Email deleted: '{subject}' from {sender}. Reason: {reason}"
+        except Exception as e:
+            return f"Error deleting email: {e}"
         finally:
             self._disconnect(mail)

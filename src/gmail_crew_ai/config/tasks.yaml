@@ -1,69 +1,40 @@
 categorization_task:
   description: >
-    Get unread emails using the 'get_unread_emails' tool.
-    Categorize each email into one of these specific categories:
+    First, get {email_limit} unread emails using the 'GetUnreadEmailsTool'.
 
-    1. SOCIALS:
-       - Social media notifications
-       - LinkedIn messages/connections
-       - Community updates
+    If there are no unread emails, report that no unread emails were found.
 
-    1a. GITHUB:  # New separate category
-       - Repository notifications
-       - Security alerts
-       - Workflow status
-       - Pull requests
-       - Issues
-       NOTE: Always add "GITHUB" label to track repository-related items
+    For each email, analyze the content and categorize as follows:
 
-    2. RECEIPTS_INVOICES:
-       - Purchase confirmations
-       - Payment receipts
-       - Subscription renewals
-       - Billing statements
+    1. Category (choose one):
+       - NEWSLETTERS: Regular updates, digests, or curated content
+       - PROMOTIONS: Marketing, sales, or promotional content
+       - PERSONAL: Personal communications from individuals
+       - GITHUB: GitHub notifications, pull requests, issues
+       - SPONSORSHIPS: Sponsorship opportunities or inquiries
+       - RECRUITMENT: Job offers, recruitment outreach
+       - COLD_EMAIL: Unsolicited business outreach
+       - EVENT_INVITATIONS: Invites to webinars, conferences, etc.
+       - RECEIPTS_INVOICES: Payment confirmations, receipts
+       - YOUTUBE: Any email related to YouTube, channel management, or video content
+       - SOCIALS: Social media notifications
 
-    3. PROMOTIONS:
-       - Sales announcements
-       - Product offers
-       - Discount codes
-       - Marketing campaigns
+    2. Priority (choose one):
+       - HIGH: Requires immediate attention (24-48 hours)
+       - MEDIUM: Should be addressed within 3-5 days
+       - LOW: Can be handled when convenient or ignored
 
-    4. NEWSLETTERS:
-       - Industry updates
-       - Daily/weekly digests
-       - Blog subscriptions
-       - Company newsletters
+    3. Required Action (choose one):
+       - REPLY: Needs a response
+       - READ_ONLY: Just needs to be read
+       - TASK: Requires a specific action beyond replying
+       - IGNORE: Can be ignored or deleted
 
-    5. RECRUITMENT:
-       - Job opportunities
-       - Interview requests
-       - Recruiter outreach
-       - Career updates
-
-    6. SPONSORSHIPS:
-       - Partnership offers
-       - Sponsorship requests
-       - Collaboration proposals
-       - Advertising opportunities
-       NOTE: All SPONSORSHIPS are automatically HIGH priority (revenue opportunity)
-
-    7. PERSONAL:
-       - Direct communications
-       - Personal requests
-       - Individual outreach
-       - Non-business matters
-
-    8. EVENT_INVITATIONS:
-       - Webinar invites
-       - Conference announcements
-       - Meetup notifications
-       - Workshop registrations
-
-    9. COLD_EMAIL:
-       - Unsolicited business proposals
-       - Sales pitches
-       - Generic outreach
-       - Mass marketing
+    4. Special Attention for YouTube Emails:
+       - Any email from youtube.com domains
+       - Any email about monetization, channel management, or video performance
+       - Any email containing "YouTube" in the subject or sender
+       - These should be categorized as YOUTUBE and given appropriate priority
 
     Priority Assignment Rules:
     1. HIGH Priority (Response within 24 hours):
@@ -87,13 +58,14 @@ categorization_task:
        - Marketing communications
        - Cold outreach
 
-    IMPORTANT: Include the email_id in your report as it will be needed by the organizer.
+    IMPORTANT: Include the email_id and date in your report as they will be needed by other agents.
     Your final answer should be a detailed report for each email, including:
     - Email Subject
     - From
     - Email ID
-    - Category (from the 9 specific categories above)
-    - Priority (if in categories 1-4)
+    - Email Date (in YYYY-MM-DD format)
+    - Category (from the specific categories above)
+    - Priority (HIGH/MEDIUM/LOW)
     - Reason for categorization
     - Required Action (if any)
     - Due Date/Timeline (if applicable)
@@ -125,12 +97,20 @@ organization_task:
        - COLD_EMAIL: "COLD"
        - EVENT_INVITATIONS: "EVENT"
        - RECEIPTS_INVOICES: "RECEIPT"
+       - YOUTUBE: "YOUTUBE" (always add regardless of priority)
 
     3. Label Combinations:
        - For HIGH priority: Use only "URGENT"
        - For MEDIUM priority: Use only "ACTION_NEEDED"
        - For LOW priority: Use category-specific label
-       - Exception: GITHUB always gets its label plus priority label
+       - Exception 1: GITHUB always gets its label plus priority label
+       - Exception 2: YOUTUBE always gets its label plus priority label
+
+    4. Special Rules for YouTube Emails:
+       - Any email from youtube.com, google.com with YouTube content, or containing "YouTube" in the subject or sender
+         should be labeled with "YOUTUBE"
+       - YouTube emails should always be starred for visibility
+       - If a YouTube email is also HIGH priority, apply both "URGENT" and "YOUTUBE" labels
 
     Make sure to use the email_id from the categorization report for each email.
     Your final answer should detail the actions taken for each email, including:
@@ -155,8 +135,14 @@ response_task:
     - NEWSLETTERS (never needs response)
     - PROMOTIONS (never needs response)
     - RECEIPTS_INVOICES (never needs response)
-    - SOCIALS (unless marked HIGH priority)
+    - GITHUB (never needs response, regardless of priority)
+    - SOCIALS (never needs response, regardless of priority)
+    - LINKEDIN notifications (never needs response, regardless of priority)
     - COLD_EMAIL (unless marked HIGH priority)
+    
+    IMPORTANT: DO NOT create "No response needed" drafts for emails that don't need responses.
+    Only use the 'DraftEmailTool' tool for emails that actually need a response.
+    For all other emails, simply mention in your final report that no response was needed.
     
     When a response is needed:
     1. Response Structure:
@@ -188,8 +174,7 @@ response_task:
          * Formal: "Best regards,"
          * Follow-up needed: "Looking forward to your response,"
          * Meeting scheduled: "Looking forward to our meeting,"
-       - Signature: Always include signature with:
-         * Your name
+       - Signature: IMPORTANT: Do NOT use "[Your name]" - always use "Tony Kipkemboi"
 
     4. Thread Handling:
        - For replies, reference the specific points/questions from the original email
@@ -197,44 +182,15 @@ response_task:
        - Place your response above any quoted text
        - Ensure the subject line maintains thread continuity (Re: prefix)
 
-    For all other emails, simply ignore them - do not create "No response needed" drafts.
-    Your final answer should only list emails that received draft responses.
-
-    Response Structure Guidelines:
-    1. Context Awareness:
-       - Reference specific details from the original email
-       - Acknowledge any deadlines or timelines mentioned
-       - Include relevant project/topic names
-       - Reference previous communications if part of a thread
-
-    2. Response Templates by Category:
-       SPONSORSHIPS:
-         - Thank for the opportunity
-         - Show familiarity with their brand/product
-         - Express genuine interest
-         - Ask about budget/requirements
-
-       RECRUITMENT:
-         - Acknowledge the role/company
-         - Reference relevant experience
-         - Show enthusiasm
-         - Ask about next steps
-
-       PERSONAL:
-         - Acknowledge relationship context
-         - Reference shared history/projects
-         - Be specific about action items
-
-    3. Priority-based Response Times:
-       HIGH:
-         - Acknowledge receipt immediately
-         - Provide concrete next steps
-         - Set clear timeline
-
-       MEDIUM:
-         - Thank for patience
-         - Provide thoughtful response
-         - Set realistic expectations
+    Your final answer should include:
+    1. A list of emails that received draft responses with:
+       - Email subject
+       - Recipient
+       - Brief summary of your response
+    
+    2. A simple list of emails that did not need responses (just mention the subject and category)
+    
+    DO NOT include the full text of your responses in the final answer, just the summary.
   expected_output: >
     A draft email saved to the drafts folder for each email that requires a response, or 
     "No response needed" for emails to be deleted or ignored. Each draft should follow the 
@@ -242,3 +198,101 @@ response_task:
   agent: response_generator
   context: [categorization_task, organization_task]
   output_file: output/response_report.txt
+
+notification_task:
+  description: >
+    Based on the categorization report, send Slack notifications for HIGH and MEDIUM priority emails using the 'SlackNotificationTool'
+    addressed to me (Tony).
+    
+    For each email with HIGH or MEDIUM priority:
+    1. Create a concise summary (2-3 sentences) of the email content
+    2. Identify the specific action needed (if any)
+    3. Create a fun, attention-grabbing headline based on:
+       - The email's content
+       - Its priority level
+       - The category
+       - Use humor and creativity!
+    
+    4. Generate a fun intro phrase that relates to the email content and use emojis
+    
+    5. Choose a fun action header that matches the email's tone and content
+    
+    6. Use the 'SlackNotificationTool' to send a notification with:
+       - Email subject
+       - Sender
+       - Category
+       - Priority
+       - Your summary
+       - Action needed
+       - Your custom headline (will replace the default)
+       - Your custom intro (will replace the default)
+       - Your custom action header (will replace the default)
+    
+    Only send notifications for emails that require attention. Do not send notifications for:
+    - LOW priority emails
+    - Newsletters, promotions, or receipts (regardless of priority)
+    
+    Your final answer should list all emails for which notifications were sent, including your creative elements.
+  expected_output: >
+    A report of which emails had Slack notifications sent, including their subjects, priorities, and the creative elements used.
+  agent: notifier
+  context: [categorization_task]
+  output_file: output/notification_report.txt
+
+cleanup_task:
+  description: >
+    Based on the categorization report, identify and delete LOW priority emails that are safe to remove.
+    
+    SAFETY RULES (VERY IMPORTANT):
+    1. NEVER delete emails with these characteristics:
+       - Any email marked as HIGH or MEDIUM priority
+       - Any email from a personal contact
+       - Any email containing financial information
+       - Any email with important attachments
+       - Any email that might be needed for records
+       - ANY email related to YouTube (extremely important)
+       - ANY email from youtube.com, google.com, or containing "YouTube" in the subject or sender
+       - ANY email less than 5 days old (regardless of category)
+    
+    2. AGE-BASED DELETION RULES:
+       - For each email, find the "Email Date" in the categorization report
+       - Use the 'DateCalculationTool' with the email date: "email_date": "YYYY-MM-DD"
+       - The tool will automatically use today's date as the reference date
+       - The tool will return the age in days and whether it meets various thresholds
+       
+       Age thresholds for deletion:
+       - LOW priority newsletters: Delete if older than 7 days
+       - LOW priority promotions: Delete if older than 14 days
+       - LOW priority social media notifications: Delete if older than 10 days
+       - LOW priority event invitations: Delete if older than 30 days (event might be in the future)
+       - LOW priority cold emails: Delete if older than 14 days
+    
+    3. SAFE TO DELETE (if they meet the age requirements above):
+       - LOW priority newsletters (except YouTube newsletters)
+       - LOW priority promotions and marketing emails (except YouTube promotions)
+       - LOW priority social media notifications (except YouTube notifications)
+       - Duplicate notifications (except YouTube notifications)
+    
+    4. For each email you decide to delete:
+       - Document the email subject and sender
+       - Provide a clear reason for deletion including its age in days
+       - Use the 'GmailDeleteTool' with the email_id and reason
+    
+    5. If you're uncertain about any email, DO NOT delete it.
+    
+    6. YOUTUBE EMAILS:
+       - YouTube emails are critical for the user's channel management
+       - ALL YouTube-related emails must be preserved regardless of age or category
+       - If an email mentions YouTube, creator, channel, video, monetization, or similar terms, DO NOT delete it
+    
+    Your final answer should include:
+    - A list of emails deleted with reasons (including age in days)
+    - A count of how many emails were deleted
+    - A list of low-priority emails you chose NOT to delete and why
+    - A specific section listing any YouTube-related emails you found and preserved
+  expected_output: >
+    A detailed report of deleted emails and those preserved, with clear reasoning for each decision
+    and special attention to YouTube-related emails that were preserved.
+  agent: cleaner
+  context: [categorization_task]
+  output_file: output/cleanup_report.txt

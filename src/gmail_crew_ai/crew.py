@@ -1,7 +1,9 @@
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 
-from gmail_crew_ai.tools.gmail_tools import GetUnreadEmailsTool, SaveDraftTool, GmailOrganizeTool
+from gmail_crew_ai.tools.gmail_tools import GetUnreadEmailsTool, SaveDraftTool, GmailOrganizeTool, GmailDeleteTool
+from gmail_crew_ai.tools.slack_tool import SlackNotificationTool
+from gmail_crew_ai.tools.date_tools import DateCalculationTool
 
 @CrewBase
 class GmailCrewAi():
@@ -32,6 +34,22 @@ class GmailCrewAi():
 			config=self.agents_config['response_generator'],
 			tools=[SaveDraftTool()],
 		)
+	
+	@agent
+	def notifier(self) -> Agent:
+		"""The email notification agent."""
+		return Agent(
+			config=self.agents_config['notifier'],
+			tools=[SlackNotificationTool()],
+		)
+
+	@agent
+	def cleaner(self) -> Agent:
+		"""The email cleanup agent."""
+		return Agent(
+			config=self.agents_config['cleaner'],
+			tools=[GmailDeleteTool(), DateCalculationTool()],
+		)
 
 	@task
 	def categorization_task(self) -> Task:
@@ -52,6 +70,20 @@ class GmailCrewAi():
 		"""The email response task."""
 		return Task(
 			config=self.tasks_config['response_task'],
+		)
+	
+	@task
+	def notification_task(self) -> Task:
+		"""The email notification task."""
+		return Task(
+			config=self.tasks_config['notification_task'],
+		)
+
+	@task
+	def cleanup_task(self) -> Task:
+		"""The email cleanup task."""
+		return Task(
+			config=self.tasks_config['cleanup_task'],
 		)
 
 	@crew

@@ -5,7 +5,8 @@ description = "gmail-crew-ai using crewAI"
 authors = [{ name = "Your Name", email = "you@example.com" }]
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    "crewai[tools]>=0.102.0,<1.0.0"
+    "bs4>=0.0.2",
+    "crewai[tools]>=0.102.0,<1.0.0",
 ]
 
 [project.scripts]

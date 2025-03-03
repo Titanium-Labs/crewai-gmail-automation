@@ -1,98 +1,100 @@
-# Gmail Automation with CrewAI
+# Gmail CrewAI
+
+Gmail CrewAI is an intelligent email management system that uses AI agents to categorize, organize, respond to, and clean up your Gmail inbox automatically.
 
 ![Gmail Automation](./assets/gmail-automation.jpg)
-
-This project uses [CrewAI](https://crewai.com) to automate Gmail inbox management through a multi-agent system. 
-
-The agents work together to:
-- **categorize emails**
-- **organize emails**
-- **generate intelligent response drafts** (drafts are saved in your Gmail `drafts` folder)
-
 ## Features
 
-- **Smart Email Categorization:**
-  - `SOCIALS` (LinkedIn, Community updates)
-  - `GITHUB` (Repository notifications, Security alerts)
-  - `RECEIPTS_INVOICES` (Purchases, Billing)
-  - `PROMOTIONS` (Marketing, Sales)
-  - `NEWSLETTERS` (Updates, Digests)
-  - `RECRUITMENT` (Job opportunities)
-  - `SPONSORSHIPS` (Partnership offers)
-  - `PERSONAL` (Direct communications)
-  - `EVENT_INVITATIONS` (Webinars, Conferences)
-  - `COLD_EMAIL` (Unsolicited pitches)
-
-- **Priority-based Organization:**
-  - `HIGH`: Response within 24 hours
-  - `MEDIUM`: Handle within 48-72 hours
-  - `LOW`: Handle when convenient
-
-- **Automated Responses:**
-  - Context-aware reply drafts
-  - Thread-aware responses
-  - Category-specific templates
-  - Professional formatting
+- **Email Categorization**: Automatically categorizes emails into specific types (newsletters, promotions, personal, etc.)
+- **Priority Assignment**: Assigns priority levels (HIGH, MEDIUM, LOW) based on content and sender
+- **Smart Organization**: Applies Gmail labels and stars based on categories and priorities
+- **Automated Responses**: Generates draft responses for important emails that need replies
+- **Slack Notifications**: Sends creative notifications for high-priority emails
+- **Intelligent Cleanup**: Safely deletes low-priority emails based on age and category
+- **YouTube Content Protection**: Special handling for YouTube-related emails
 
 ## Installation
 
-1. **Prerequisites:**
-   - Python `>=3.10 <3.13`
-   - Gmail account with IMAP enabled; create an app password here: (https://myaccount.google.com/u/3/apppasswords)
-   - App password for Gmail
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/gmail_crew_ai.git
+cd gmail_crew_ai
 
-2. **Setup:**
+# Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-    - Clone this repository
-        ```bash
-        git clone https://github.com/tonykipkemboi/crewai-gmail-automation.git
-        ```
-    - Install dependencies by running:
-        ```bash
-        crewai install
-        ```
+# Install dependencies
+crewai install
+```
 
-3. **Configuration:**
-   Create a `.env` file with:
-    ```text
-    GEMINI_API_KEY=your_key_here (YOU CAN USE OPENAI_API_KEY AS WELL)
-    EMAIL_ADDRESS=your.email@gmail.com
-    APP_PASSWORD=your_gmail_app_password
-    ```
+## Configuration
+
+1. Create a `.env` file in the root directory with the following variables:
+
+```
+# Choose your LLM provider
+# Gemini
+MODEL=gemini/gemini-2.0-flash
+GEMINI_API_KEY=your_gemini_api_key
+
+# Or Ollama
+MODEL=ollama/llama3-groq-tool-use # use ones that have tool calling capabilities
+
+# Gmail credentials
+EMAIL_ADDRESS=your_email@gmail.com
+APP_PASSWORD=your_app_password
+
+# Optional: Slack notifications
+SLACK_WEBHOOK_URL=your_slack_webhook_url
+```
+
+2. To get an App Password for Gmail:
+   - Go to your `Google Account > Security`
+   - Enable `2-Step Verification` if not already enabled
+   - Go to `App passwords`
+   - Select `Mail` and `Other (Custom name)`
+   - Enter `Gmail CrewAI` and click `Generate`
+   - Copy the 16-character password
 
 ## Usage
 
-Run the automation:
-    ```bash
-    crewai run
-    ```
+Run the application with:
 
-The system will:
-1. Fetch unread emails
+```bash
+crewai run
+```
+
+You'll be prompted to enter the number of emails to process (default is 5).
+
+The application will:
+1. Fetch your unread emails
 2. Categorize them by type and priority
-3. Apply appropriate labels
-4. Create response drafts for important emails
+3. Apply appropriate labels and stars
+4. Generate draft responses for important emails
+5. Send Slack notifications for high-priority items
+6. Clean up low-priority emails based on age
 
 ## Output
 
-The system generates three reports:
-- `output/categorization_report.txt`: Email categorization details
-- `output/organization_report.txt`: Applied labels and organization
-- `output/response_report.txt`: Generated email responses
+The application generates detailed reports in the `output` directory:
+- `categorization_report.txt`: Details about each email's category and priority
+- `organization_report.txt`: Actions taken to organize emails
+- `response_report.txt`: Draft responses created
+- `notification_report.txt`: Slack notifications sent
+- `cleanup_report.txt`: Emails deleted and preserved
 
-## Customization
+## Special Features
 
-- `src/gmail_crew_ai/config/tasks.yaml`: Modify categorization rules and response templates
-- `src/gmail_crew_ai/config/agents.yaml`: Adjust agent behaviors
-- `src/gmail_crew_ai/tools/gmail_tools.py`: Customize Gmail interactions
+- **Date-Based Cleanup**: Emails are only deleted if they meet age thresholds based on category
+- **YouTube Protection**: All YouTube-related emails are preserved regardless of age
+- **Smart Response Generation**: Responses are tailored to the email context and include proper formatting
+- **Creative Slack Notifications**: Fun, attention-grabbing notifications for important emails
 
-## Support
+## Contributing
 
-For questions or issues:
-- [Project Issues](https://github.com/tonykipkemboi/crewai-gmail-automation/issues)
-- [CrewAI Documentation](https://docs.crewai.com)
-- [Join CrewAI Community](https://community.crewai.com)
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-[MIT License](LICENSE)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
