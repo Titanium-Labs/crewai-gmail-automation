@@ -1,68 +1,50 @@
-from datetime import datetime, timedelta
+from datetime import datetime, date
 from typing import Optional
 from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
+import time
 
 class DateCalculationSchema(BaseModel):
     """Schema for DateCalculationTool input."""
     email_date: str = Field(..., description="Email date in ISO format (YYYY-MM-DD)")
-    reference_date: Optional[str] = Field(None, description="Reference date in ISO format (YYYY-MM-DD). Defaults to today.")
+    # Remove reference_date from schema to prevent agent from using it
+    # reference_date: Optional[str] = Field(None, description="Reference date in ISO format (YYYY-MM-DD). Defaults to today.")
 
 class DateCalculationTool(BaseTool):
     """Tool to calculate the age of an email in days."""
     name: str = "calculate_email_age"
-    description: str = "Calculates the age of an email in days based on its date"
+    description: str = "Calculate how many days old an email is compared to today's date"
     args_schema: type[BaseModel] = DateCalculationSchema
 
     def _run(self, email_date: str, reference_date: Optional[str] = None) -> str:
-        """
-        Calculate the age of an email in days.
+        """Calculate the age of an email in days compared to today.
         
         Args:
-            email_date: The date of the email in ISO format (YYYY-MM-DD)
-            reference_date: Optional reference date in ISO format (YYYY-MM-DD). Defaults to today.
+            email_date: The date of the email in YYYY-MM-DD format
             
         Returns:
-            A string with the age in days and whether it meets various age thresholds.
+            A string with the email age information
         """
         try:
-            # Handle empty or invalid date
-            if not email_date or email_date == "":
-                return "Error: Email date is empty or invalid. Cannot calculate age."
-            
-            # Get today's date automatically
-            today = datetime.now().strftime("%Y-%m-%d")
-            
             # Parse the email date
-            try:
-                email_datetime = datetime.strptime(email_date, "%Y-%m-%d")
-            except ValueError:
-                return f"Error: Could not parse email date '{email_date}'. Format should be YYYY-MM-DD."
+            email_date_obj = datetime.strptime(email_date, "%Y-%m-%d").date()
             
-            # Get reference date (today if not provided)
-            if reference_date:
-                try:
-                    ref_datetime = datetime.strptime(reference_date, "%Y-%m-%d")
-                except ValueError:
-                    # If reference_date is invalid, use today
-                    ref_datetime = datetime.strptime(today, "%Y-%m-%d")
-            else:
-                ref_datetime = datetime.strptime(today, "%Y-%m-%d")
+            # Always use today's date - ignore any provided reference_date
+            today = date.today()
             
-            # Calculate age in days
-            age_days = (ref_datetime - email_datetime).days
+            # Calculate the age in days
+            age_days = (today - email_date_obj).days
             
-            # Check against common thresholds
-            result = f"Email age: {age_days} days\n"
-            result += f"Today's date: {today}\n"
-            result += f"Email date: {email_date}\n"
-            result += f"- Less than 5 days old: {'Yes' if age_days < 5 else 'No'}\n"
-            result += f"- Older than 7 days: {'Yes' if age_days > 7 else 'No'}\n"
-            result += f"- Older than 10 days: {'Yes' if age_days > 10 else 'No'}\n"
-            result += f"- Older than 14 days: {'Yes' if age_days > 14 else 'No'}\n"
-            result += f"- Older than 30 days: {'Yes' if age_days > 30 else 'No'}\n"
+            # Create the response
+            response = f"Email age: {age_days} days from today ({today})\n"
+            response += f"Email date: {email_date_obj}\n"
+            response += f"- Less than 5 days old: {'Yes' if age_days < 5 else 'No'}\n"
+            response += f"- Older than 7 days: {'Yes' if age_days > 7 else 'No'}\n"
+            response += f"- Older than 10 days: {'Yes' if age_days > 10 else 'No'}\n"
+            response += f"- Older than 14 days: {'Yes' if age_days > 14 else 'No'}\n"
+            response += f"- Older than 30 days: {'Yes' if age_days > 30 else 'No'}\n"
             
-            return result
+            return response
             
         except Exception as e:
-            return f"Error calculating email age: {e}" 
+            return f"Error calculating email age: {str(e)}" 

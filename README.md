@@ -16,12 +16,15 @@ Gmail Automation with CrewAI is an intelligent email management system that uses
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
 - **📋 Email Categorization**: Automatically categorizes emails into specific types (newsletters, promotions, personal, etc.)
-- **🔔 Priority Assignment**: Assigns priority levels (HIGH, MEDIUM, LOW) based on content and sender
+- **🔔 Priority Assignment**: Assigns priority levels (HIGH, MEDIUM, LOW) based on content and sender with strict classification rules
 - **🏷️ Smart Organization**: Applies Gmail labels and stars based on categories and priorities
 - **💬 Automated Responses**: Generates draft responses for important emails that need replies
 - **📱 Slack Notifications**: Sends creative notifications for high-priority emails
 - **🧹 Intelligent Cleanup**: Safely deletes low-priority emails based on age and category
 - **🎬 YouTube Content Protection**: Special handling for YouTube-related emails
+- **🗑️ Trash Management**: Automatically empties trash to free up storage space
+- **🧵 Thread Awareness**: Recognizes and properly handles email threads
+
 
 ## 🚀 Installation
 
@@ -44,13 +47,17 @@ crewai install
 
 ```
 # Choose your LLM provider
-# Gemini
-MODEL=gemini/gemini-2.0-flash
-GEMINI_API_KEY=your_gemini_api_key
+# OpenAI (Recommended)
+MODEL=openai/gpt-4o-mini
+OPENAI_API_KEY=your_openai_api_key
 
-# Or Ollama
+# Or Gemini
+# MODEL=gemini/gemini-2.0-flash
+# GEMINI_API_KEY=your_gemini_api_key
+
+# Or Ollama  (Note: May have compatibility issues with tool calling)
 # Download the model from https://ollama.com/library
-MODEL=ollama/llama3-groq-tool-use # use ones that have tool calling capabilities
+# MODEL=ollama/llama3-groq-tool-use # use ones that have tool calling capabilities
 
 # Gmail credentials
 EMAIL_ADDRESS=your_email@gmail.com
@@ -144,22 +151,24 @@ The application will:
 4. ✏️ Generate draft responses for important emails
 5. 🔔 Send Slack notifications for high-priority items
 6. 🗑️ Clean up low-priority emails based on age
+7. 🧹 Empty the trash to free up storage space
 
-## 📊 Output
-
-The application generates detailed reports in the `output` directory:
-- `categorization_report.txt`: Details about each email's category and priority
-- `organization_report.txt`: Actions taken to organize emails
-- `response_report.txt`: Draft responses created
-- `notification_report.txt`: Slack notifications sent
-- `cleanup_report.txt`: Emails deleted and preserved
 
 ## 🌟 Special Features
 
-- **📅 Date-Based Cleanup**: Emails are only deleted if they meet age thresholds based on category
-- **🎬 YouTube Protection**: All YouTube-related emails are preserved regardless of age (am a YouTube partner, so this is important to me)
+- **📅 Smart Deletion Rules**: 
+  - Promotions older than 2 days are automatically deleted
+  - Newsletters older than 7 days (unless HIGH priority) are deleted
+  - Shutterfly emails are always deleted regardless of age
+  - Receipts and important documents are archived instead of deleted
+
+- **🎬 YouTube Protection**: All YouTube-related emails are preserved and marked as READ_ONLY (you'll respond directly on YouTube)
+
 - **✍️ Smart Response Generation**: Responses are tailored to the email context and include proper formatting
+
 - **💡 Creative Slack Notifications**: Fun, attention-grabbing notifications for important emails
+
+- **🧵 Thread Handling**: Properly tracks and manages email threads to maintain conversation context
 
 ## 👥 Contributing
 
@@ -176,4 +185,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Slack API](https://api.slack.com/messaging/webhooks)
 - [Ollama](https://ollama.com/library)
 - [Gemini](https://ai.google.com/gemini-api)
+- [OpenAI](https://openai.com/api/)
 

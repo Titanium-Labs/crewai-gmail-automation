@@ -3,9 +3,16 @@ import sys
 import warnings
 from dotenv import load_dotenv
 
-from gmail_crew_ai.crew import GmailCrewAi
+# Remove or comment out these debug lines
+# import litellm
+# litellm._turn_on_debug()
 
+# Add this line to suppress the warning
+warnings.filterwarnings("ignore", message=".*not a Python type.*")
+# Keep your existing warning filter
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
+
+from gmail_crew_ai.crew import GmailCrewAi
 
 def run():
     """Run the Gmail Crew AI."""
@@ -32,6 +39,11 @@ def run():
         # Create and run the crew with the specified email limit
         result = GmailCrewAi().crew().kickoff(inputs={'email_limit': email_limit})
         
+        # Check if result is empty or None
+        if not result:
+            print("\nNo emails were processed. Inbox might be empty.")
+            return 0
+            
         # Print the result in a clean way
         if result:
             print("\nCrew execution completed successfully! 🎉")
@@ -43,42 +55,6 @@ def run():
     except Exception as e:
         print(f"\nError: {e}")
         return 1  # Return error code
-
-def train():
-    """
-    Train the crew for a given number of iterations.
-    """
-    try:
-        GmailCrewAi().crew().train(n_iterations=int(sys.argv[1]), filename=sys.argv[2])
-        return 0
-    except Exception as e:
-        print(f"An error occurred while training the crew: {e}")
-        return 1
-
-def replay():
-    """
-    Replay the crew execution from a specific task.
-    """
-    try:
-        GmailCrewAi().crew().replay(task_id=sys.argv[1])
-        return 0
-    except Exception as e:
-        print(f"An error occurred while replaying the crew: {e}")
-        return 1
-
-def test():
-    """
-    Test the crew execution and returns the results.
-    """
-    inputs = {
-        "topic": "AI LLMs"
-    }
-    try:
-        GmailCrewAi().crew().test(n_iterations=int(sys.argv[1]), openai_model_name=sys.argv[2], inputs=inputs)
-        return 0
-    except Exception as e:
-        print(f"An error occurred while testing the crew: {e}")
-        return 1
 
 if __name__ == "__main__":
     sys.exit(run())  # Use the return value as the exit code

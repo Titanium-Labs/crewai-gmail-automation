@@ -37,8 +37,7 @@ ENV/
 *.swo
 
 # Project specific
-output/*.txt
-output/*.json
+output
 *.log
 
 # OS specific

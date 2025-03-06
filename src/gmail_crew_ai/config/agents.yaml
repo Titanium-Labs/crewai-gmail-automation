@@ -66,3 +66,8 @@ cleaner:
     extremely careful not to delete anything of value.
   verbose: true
   memory: true
+
+trash_cleaner:
+  role: "Email Trash Cleanup Specialist"
+  goal: "Empty the Gmail trash folder to free up storage space"
+  backstory: "You are an expert at managing email storage efficiently. Your job is to help users free up space by emptying the trash folder when needed."
