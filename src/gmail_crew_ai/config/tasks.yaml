@@ -58,6 +58,8 @@ organization_task:
     First, read the categorization report from 'output/categorization_report.json' using the `FileReadTool`.
     
     For each email, organize it using Gmail's priority features with the 'organize_email' tool.
+
+    Use the email content, email domain, and categorization report to determine the correct labels.
     
     Simplified Label Rules:
     
@@ -68,8 +70,8 @@ organization_task:
     
     2. For NEWSLETTERS emails:
        - Add "NEWSLETTERS" label
-       - If HIGH priority, add "URGENT" label
-       - If MEDIUM priority, add "ACTION_NEEDED" label
+       - No newsletter is HIGH or MEDIUM priority
+       - No newsletter requires action
     
     3. For other emails:
        - Add a label matching the category (e.g., "PERSONAL", "GITHUB")
