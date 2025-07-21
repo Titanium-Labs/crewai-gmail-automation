@@ -44,3 +44,70 @@ output
 .DS_Store
 Thumbs.db
 
+# 🔒 SENSITIVE FILES - NEVER COMMIT THESE 🔒
+
+# Google OAuth Client Secrets
+client_secret*.json
+*.client_secret.json
+credentials.json
+service_account*.json
+
+# OAuth Tokens and Authentication
+tokens/
+*.token.pickle
+*.pickle
+*_token.json
+*_credentials.json
+
+# User Data and Sessions
+user_sessions.json
+users.json
+usage.json
+subscriptions.json
+registration_requests.json
+approval_tokens.json
+error_logs.json
+
+# Stripe and Payment Data
+stripe_*.json
+webhook_*.json
+payment_*.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration files that may contain secrets
+config.json
+settings.json
+secrets.json
+private_*.json
+
+# Log files that may contain sensitive data
+*.log
+logs/
+*.log.*
+
+# Temporary sensitive files
+temp_*.json
+tmp_*.json
+*.tmp
+*.temp
+
+# Backup files that might contain sensitive data
+*.bak
+*.backup
+*_backup.*
+
+# Any files with 'secret', 'password', 'key', 'token' in name
+*secret*
+*password*
+*key*
+*token*
+*credential*
+
+# Exclude Stripe CLI executable
+stripe.exe
+stripe
+
