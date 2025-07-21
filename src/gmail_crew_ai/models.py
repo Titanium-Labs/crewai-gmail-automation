@@ -19,7 +19,18 @@ class EmailDetails(BaseModel):
     def from_email_tuple(cls, email_tuple):
         """Create an EmailDetails from an email tuple."""
         if not email_tuple or len(email_tuple) < 5:
-            return cls(email_id=None, subject=None)
+            return cls(
+                email_id=None, 
+                subject=None, 
+                sender=None, 
+                body=None, 
+                date=None, 
+                age_days=None, 
+                thread_info=None,
+                is_part_of_thread=False,
+                thread_size=1,
+                thread_position=1
+            )
         
         subject, sender, body, email_id, thread_info = email_tuple
         
@@ -34,7 +45,11 @@ class EmailDetails(BaseModel):
             sender=sender,
             body=body,
             date=date,
-            thread_info=thread_info
+            age_days=None,
+            thread_info=thread_info,
+            is_part_of_thread=False,
+            thread_size=1,
+            thread_position=1
         )
 
 # Define the valid categories, priorities, and actions as type aliases
@@ -115,7 +130,16 @@ class SimpleCategorizedEmail(BaseModel):
     def from_email_tuple(cls, email_tuple):
         """Create a SimpleCategorizedEmail from an email tuple."""
         if not email_tuple or len(email_tuple) < 5:
-            return cls(email_id=None, subject=None)
+            return cls(
+                email_id=None, 
+                subject=None, 
+                sender=None, 
+                category=None, 
+                priority=None, 
+                required_action=None, 
+                date=None, 
+                age_days=None
+            )
         
         subject, sender, body, email_id, thread_info = email_tuple
         
@@ -131,5 +155,46 @@ class SimpleCategorizedEmail(BaseModel):
             email_id=email_id,
             subject=subject,
             sender=sender,
-            date=date
+            category=None,
+            priority=None,
+            required_action=None,
+            date=date,
+            age_days=None
         )
+
+# NEW: List-based models for processing multiple emails
+class CategorizedEmailsList(BaseModel):
+    """Model for multiple categorized emails."""
+    emails: List[SimpleCategorizedEmail] = Field(..., description="List of categorized emails")
+    total_processed: int = Field(..., description="Total number of emails processed")
+    summary: str = Field(..., description="Summary of categorization results")
+
+class OrganizedEmailsList(BaseModel):
+    """Model for multiple organized emails."""
+    emails: List[OrganizedEmail] = Field(..., description="List of organized emails")
+    total_processed: int = Field(..., description="Total number of emails organized")
+    summary: str = Field(..., description="Summary of organization results")
+
+class EmailResponsesList(BaseModel):
+    """Model for multiple email responses."""
+    emails: List[EmailResponse] = Field(..., description="List of email responses")
+    total_processed: int = Field(..., description="Total number of emails processed")
+    responses_generated: int = Field(..., description="Number of responses generated")
+    summary: str = Field(..., description="Summary of response generation results")
+
+class SlackNotificationsList(BaseModel):
+    """Model for multiple Slack notifications."""
+    notifications: List[SlackNotification] = Field(..., description="List of Slack notifications")
+    total_processed: int = Field(..., description="Total number of emails processed")
+    notifications_sent: int = Field(..., description="Number of notifications sent")
+    summary: str = Field(..., description="Summary of notification results")
+
+class EmailCleanupReport(BaseModel):
+    """Model for email cleanup report."""
+    processed_emails: List[EmailCleanupInfo] = Field(..., description="List of processed emails")
+    total_processed: int = Field(..., description="Total number of emails processed")
+    deleted_count: int = Field(..., description="Number of emails deleted")
+    preserved_count: int = Field(..., description="Number of emails preserved")
+    trash_emptied: bool = Field(..., description="Whether trash was emptied")
+    trash_messages_removed: int = Field(default=0, description="Number of messages removed from trash")
+    summary: str = Field(..., description="Summary of cleanup results")

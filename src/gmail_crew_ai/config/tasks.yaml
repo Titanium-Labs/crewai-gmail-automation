@@ -2,7 +2,7 @@ categorization_task:
   description: >
     First, read the fetched emails from the file at 'output/fetched_emails.json' using the `FileReadTool`.
     
-    For each email, analyze the content and categorize as follows:
+    IMPORTANT: Process ALL emails in the file, not just one. For each email in the list, analyze the content and categorize as follows:
 
     1. Category (choose one):
        - NEWSLETTERS
@@ -35,21 +35,17 @@ categorization_task:
       (the user will reply directly on YouTube, not via email)
     
     IMPORTANT FORMAT INSTRUCTIONS:
-    Your final answer must be a valid JSON object with these exact fields(example without the quotes):
-      "email_id": "The email's unique identifier",
-      "subject": "The email's subject line",
-      "sender": "The email sender",
-      "category": "The category you assigned",
-      "priority": "The priority you assigned",
-      "required_action": "The action needed",
-      "date": "The email date in YYYY-MM-DD format",
-      "age_days": "The age of the email in days"
+    Your final answer must be a JSON object with these exact fields:
     
-    Do not include any explanations, thoughts, or additional text outside the JSON object.
+    - emails: Array of email objects, each containing email_id, subject, sender, category, priority, required_action, date, and age_days
+    - total_processed: Number of emails processed
+    - summary: Brief summary of categorization results
+    
+    Process ALL emails in the fetched file. Do not include any explanations, thoughts, or additional text outside the JSON object.
     Do not use markdown formatting or code blocks.
     Just return the raw JSON object.
   expected_output: >
-    A JSON object with email_id, subject, category, priority, and required_action fields.
+    A JSON object containing a list of all categorized emails with email_id, subject, sender, category, priority, required_action, date, and age_days fields for each email, plus total_processed count and summary.
   agent: categorizer
   output_file: output/categorization_report.json
 
@@ -57,7 +53,7 @@ organization_task:
   description: >
     First, read the categorization report from 'output/categorization_report.json' using the `FileReadTool`.
     
-    For each email, organize it using Gmail's priority features with the 'organize_email' tool.
+    IMPORTANT: Process ALL emails from the categorization report. For each email in the list, organize it using Gmail's priority features with the 'OAuth2GmailOrganizeTool' tool.
 
     Use the email content, email domain, and categorization report to determine the correct labels.
     
@@ -79,17 +75,18 @@ organization_task:
        - If MEDIUM priority, add "ACTION_NEEDED" label
     
     Your final answer should be a JSON object with:
-    - email_id: The email's ID
-    - subject: The email's subject
-    - applied_labels: List of labels applied
-    - starred: Whether the email was starred (true/false)
-    - result: "Success" or error message
+    - emails: Array of email objects with email_id, subject, applied_labels (array), starred (boolean), and result
+    - total_processed: Number of emails processed
+    - summary: Brief summary of organization results
   expected_output: >
-    A detailed report of how each email was organized, including:
-    - The email ID and subject
-    - The labels that were applied
-    - Whether the email was starred
-    - The result of the organization attempt
+    A JSON object containing a detailed report of how ALL emails were organized, including:
+    - A list of all processed emails with their organization details
+    - The email ID and subject for each email
+    - The labels that were applied to each email
+    - Whether each email was starred
+    - The result of each organization attempt
+    - Total count of processed emails
+    - Summary of results
 
     The report should include special handling for YOUTUBE and NEWSLETTERS emails to ensure they receive
     the appropriate labels and priority indicators.
@@ -101,6 +98,16 @@ response_task:
   description: >
     Based on the categorization report, generate responses ONLY for emails that require action.
     
+    FIRST: Read the user persona from knowledge/user_facts.txt using FileReadTool to understand:
+    - User's professional background and role
+    - Communication style and tone preferences
+    - Personal interests and relationships
+    - Work context and industry
+    - Family and personal situation
+    Use this information to craft personalized, authentic responses that match the user's voice.
+    
+    IMPORTANT: Process ALL emails from the categorization report. For each email:
+    
     Only generate responses for:
     - PERSONAL emails with HIGH or MEDIUM priority
     - DO NOT generate responses for ANY YouTube emails - the user will respond directly on YouTube instead
@@ -109,23 +116,37 @@ response_task:
     For YouTube comments:
     - Thank them for their comment
     - Answer their question if possible
-    - End with "Best regards, Tony Kipkemboi"
     
     IMPORTANT: For the recipient field, extract the username from the comment.
     For example, if the comment is from "@username commented on your video",
     use "username@gmail.com" as the recipient.
     
-    Use the 'save_email_draft' tool with:
+    When crafting responses, reference the user persona to:
+    - Match the user's typical communication style (formal/casual)
+    - Include relevant personal or professional context
+    - Use appropriate tone based on the relationship with the recipient
+    - Reference shared interests or past interactions if relevant
+    
+    Use the 'OAuth2SaveDraftTool' tool with:
     - subject: Add "Re: " to the original subject
-    - body: Your response
+    - body: Your response (personalized using user persona information)
     - recipient: The extracted username + "@gmail.com" or use "user@example.com" if you can't extract it
     
-    Your final answer should be a simple list of emails you responded to.
+    Your final answer should be a JSON object with:
+    - emails: Array of email objects with email_id, subject, recipient, response_summary, response_needed (boolean), and draft_saved (boolean)
+    - total_processed: Number of emails processed
+    - responses_generated: Number of responses created
+    - summary: Brief summary of response generation results
   expected_output: >
-    A draft email saved to the drafts folder for each email that requires a response, or 
-    "No response needed" for emails to be deleted or ignored. Each draft should follow the 
-    specified structure and formatting guidelines. The should be in correct Markdown format without
-    any additional text or formatting such as "```" or "```md".
+    A JSON object containing information about ALL processed emails and which ones received responses:
+    - A list of all emails with response details
+    - Whether each email needed a response
+    - Whether a draft was saved for each email that needed one
+    - Total count of processed emails
+    - Count of responses generated
+    - Summary of results
+    
+    Each draft should follow the specified structure and formatting guidelines.
   agent: response_generator
   context: [categorization_task, organization_task]
   output_file: output/response_report.json
@@ -134,7 +155,7 @@ notification_task:
   description: >
     Based on the categorization report, send Slack notifications for HIGH priority emails using the 'SlackNotificationTool'.
     
-    For each HIGH priority email:
+    IMPORTANT: Process ALL emails from the categorization report. For each HIGH priority email:
     1. Create a brief summary of the email content
     2. Identify any action needed
     3. Create an attention-grabbing headline
@@ -150,10 +171,18 @@ notification_task:
     - headline: Your custom headline
     - intro: Your custom intro with emojis
     
-    Your final answer should list all notifications sent.
+    Your final answer should be a JSON object with:
+    - notifications: Array of notification objects for HIGH priority emails with email_id, subject, sender, category, priority, summary, action_needed, headline, intro, and notification_sent (boolean)
+    - total_processed: Number of emails processed
+    - notifications_sent: Number of notifications sent
+    - summary: Brief summary of notification results
   expected_output: >
-    A report of which emails had Slack notifications sent, including their subjects, priorities, and the creative elements used.
-    The report should be in correct Markdown format without any additional text or formatting such as "```" or "```md".
+    A JSON object containing information about ALL processed emails and which HIGH priority ones received Slack notifications:
+    - A list of all HIGH priority emails with notification details
+    - Whether notifications were successfully sent
+    - Total count of processed emails
+    - Count of notifications sent
+    - Summary of results including subjects, priorities, and creative elements used
   agent: notifier
   context: [categorization_task]
   output_file: output/notification_report.json
@@ -161,6 +190,8 @@ notification_task:
 cleanup_task:
   description: >
     Based on the categorization report, identify LOW priority emails that are safe to delete.
+    
+    IMPORTANT: Process ALL emails from the categorization report.
     
     EMAILS TO ARCHIVE INSTEAD OF DELETE:
     - Receipts and Invoices (archive for tax purposes)
@@ -201,11 +232,14 @@ cleanup_task:
     3. After processing all emails, use empty_gmail_trash tool
     4. Then compile your final report
 
-    Your final answer should provide a detailed report containing:
-    - DELETED EMAILS: For each deleted email, include email_id, subject, sender, category, priority, age, and reason for deletion
-    - PRESERVED EMAILS: For each preserved email, include email_id, subject, sender, category, priority, age, and reason for preservation
-    - TRASH STATUS: Information about whether the trash was emptied successfully and how many messages were permanently removed
-    Also include information about whether the trash was emptied successfully.
+    Your final answer should be a JSON object with:
+    - processed_emails: Array of email objects with email_id, subject, sender, age_days (number), deleted (boolean), and reason
+    - total_processed: Number of emails processed
+    - deleted_count: Number of emails deleted
+    - preserved_count: Number of emails preserved
+    - trash_emptied: Boolean indicating if trash was emptied
+    - trash_messages_removed: Number of messages removed from trash
+    - summary: Brief summary of cleanup results
 
     IMPORTANT: When using the 'delete_email' tool, ONLY provide the email_id and reason 
     as a simple JSON object. For example:
@@ -214,11 +248,14 @@ cleanup_task:
       "reason": "Low priority promotional email"
     
   expected_output: >
-    A comprehensive deletion report with three sections:
-    1. DELETED EMAILS: Full details of each deleted email including subject, sender, id, category, priority, age and deletion reason
-    2. PRESERVED EMAILS: Full details of each preserved email including the reason for preservation
-    3. TRASH STATUS: Results of the trash emptying operation including number of messages permanently removed
-    The report should be in JSON format for easy parsing and tracking.
+    A JSON object containing a comprehensive cleanup report with:
+    - A list of all processed emails with their deletion/preservation details
+    - Total counts of processed, deleted, and preserved emails
+    - Information about whether the trash was emptied successfully
+    - Number of messages permanently removed from trash
+    - Summary of cleanup results
+    
+    The report should include full details for tracking purposes and be in JSON format for easy parsing.
   agent: cleaner
   context: [categorization_task, organization_task]
   output_file: output/cleanup_report.json

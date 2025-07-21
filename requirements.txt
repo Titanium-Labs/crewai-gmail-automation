@@ -1,0 +1,12 @@
+crewai[tools]>=0.102.0,<1.0.0
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.147.0
+streamlit==1.39.0
+streamlit-authenticator==0.3.3
+cryptography==43.0.1
+python-dotenv==1.0.1
+beautifulsoup4==4.12.3
+requests==2.32.3
+typing-inspection==0.4.1
+stripe==8.0.0

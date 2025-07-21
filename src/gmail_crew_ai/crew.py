@@ -1,6 +1,6 @@
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task, before_kickoff
-from crewai_tools import FileReadTool
+from gmail_crew_ai.tools.file_tools import FileReadTool, JsonFileReadTool, JsonFileSaveTool
 import json
 import os
 from typing import List, Dict, Any, Callable
@@ -10,7 +10,7 @@ from datetime import date, datetime
 from gmail_crew_ai.tools.gmail_tools import GetUnreadEmailsTool, SaveDraftTool, GmailOrganizeTool, GmailDeleteTool, EmptyTrashTool
 from gmail_crew_ai.tools.slack_tool import SlackNotificationTool
 from gmail_crew_ai.tools.date_tools import DateCalculationTool
-from gmail_crew_ai.models import CategorizedEmail, OrganizedEmail, EmailResponse, SlackNotification, EmailCleanupInfo, SimpleCategorizedEmail, EmailDetails
+from gmail_crew_ai.models import CategorizedEmail, OrganizedEmail, EmailResponse, SlackNotification, EmailCleanupInfo, SimpleCategorizedEmail, EmailDetails, CategorizedEmailsList, OrganizedEmailsList, EmailResponsesList, SlackNotificationsList, EmailCleanupReport
 
 @CrewBase
 class GmailCrewAi():
@@ -40,6 +40,10 @@ class GmailCrewAi():
 		for email_tuple in email_tuples:
 			email_detail = EmailDetails.from_email_tuple(email_tuple)
 			
+			# Limit body content to prevent context overflow when agents process the file
+			if email_detail.body and len(email_detail.body) > 300:
+				email_detail.body = email_detail.body[:300] + "... [Body limited for processing efficiency]"
+			
 			# Calculate age if date is available
 			if email_detail.date:
 				try:
@@ -52,9 +56,12 @@ class GmailCrewAi():
 			
 			emails.append(email_detail.dict())
 		
-		# Save emails to file
-		with open('output/fetched_emails.json', 'w') as f:
-			json.dump(emails, f, indent=2)
+		# Ensure output directory exists
+		os.makedirs('output', exist_ok=True)
+		
+		# Save emails to file with UTF-8 encoding
+		with open('output/fetched_emails.json', 'w', encoding='utf-8') as f:
+			json.dump(emails, f, indent=2, ensure_ascii=False)
 		
 		print(f"Fetched and saved {len(emails)} emails to output/fetched_emails.json")
 		
@@ -115,7 +122,7 @@ class GmailCrewAi():
 		"""The email categorization task."""
 		return Task(
 			config=self.tasks_config['categorization_task'],
-			output_pydantic=SimpleCategorizedEmail
+			output_pydantic=CategorizedEmailsList
 		)
 	
 	@task
@@ -123,7 +130,7 @@ class GmailCrewAi():
 		"""The email organization task."""
 		return Task(
 			config=self.tasks_config['organization_task'],
-			output_pydantic=OrganizedEmail,
+			output_pydantic=OrganizedEmailsList,
 		)
 
 	@task
@@ -131,7 +138,7 @@ class GmailCrewAi():
 		"""The email response task."""
 		return Task(
 			config=self.tasks_config['response_task'],
-			output_pydantic=EmailResponse,
+			output_pydantic=EmailResponsesList,
 		)
 	
 	@task
@@ -139,7 +146,7 @@ class GmailCrewAi():
 		"""The email notification task."""
 		return Task(
 			config=self.tasks_config['notification_task'],
-			output_pydantic=SlackNotification,
+			output_pydantic=SlackNotificationsList,
 		)
 
 	@task
@@ -147,7 +154,7 @@ class GmailCrewAi():
 		"""The email cleanup task."""
 		return Task(
 			config=self.tasks_config['cleanup_task'],
-			output_pydantic=EmailCleanupInfo,
+			output_pydantic=EmailCleanupReport,
 		)
 
 	@crew
@@ -256,7 +263,7 @@ class GmailCrewAi():
 				print("WARNING: Output contains placeholder values, trying to fix")
 				# Try to get the real email ID from the fetched emails
 				try:
-					with open("output/fetched_emails.json", "r") as f:
+					with open("output/fetched_emails.json", "r", encoding='utf-8') as f:
 						fetched_emails = json.load(f)
 						if fetched_emails and len(fetched_emails) > 0:
 							real_email = fetched_emails[0]

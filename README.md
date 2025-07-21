@@ -24,6 +24,8 @@ Gmail Automation with CrewAI is an intelligent email management system that uses
 - **🎬 YouTube Content Protection**: Special handling for YouTube-related emails
 - **🗑️ Trash Management**: Automatically empties trash to free up storage space
 - **🧵 Thread Awareness**: Recognizes and properly handles email threads
+- **💳 Subscription Management**: Stripe-powered subscription system with usage-based limits
+- **📊 Usage Tracking**: Daily email processing limits based on subscription tier
 
 
 ## 🚀 Installation
@@ -65,6 +67,13 @@ APP_PASSWORD=your_app_password
 
 # Optional: Slack notifications
 SLACK_WEBHOOK_URL=your_slack_webhook_url
+
+# Stripe Configuration (for subscription management)
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
+STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+STRIPE_BASIC_PRICE_ID=price_basic_monthly
+STRIPE_PREMIUM_PRICE_ID=price_premium_monthly
 ```
 
 <details>
@@ -173,6 +182,34 @@ The application will:
 ## 👥 Contributing
 
 Contributions are welcome! Please feel free to submit a [Pull Request](https://github.com/tonykipkemboi/crewai-gmail-automation/pulls).
+
+## 💳 Subscription Plans
+
+The application includes a built-in subscription management system with three tiers:
+
+### Free Plan
+- **Price**: $0/month
+- **Daily Limit**: 10 emails
+- **Features**: Basic email categorization, Gmail integration
+
+### Basic Plan
+- **Price**: $9.99/month
+- **Daily Limit**: 100 emails
+- **Features**: All Free features + automated responses, Slack notifications, email cleanup
+
+### Premium Plan
+- **Price**: $29.99/month
+- **Daily Limit**: 1000 emails
+- **Features**: All Basic features + priority support, custom email rules, analytics dashboard
+
+### Setting Up Subscriptions
+
+To enable subscription management:
+
+1. Create a Stripe account at [stripe.com](https://stripe.com)
+2. Follow the detailed setup guide in [STRIPE_SETUP.md](STRIPE_SETUP.md)
+3. Configure your environment variables with Stripe keys
+4. Set up webhook endpoints for real-time subscription updates
 
 ## 📄 License
 

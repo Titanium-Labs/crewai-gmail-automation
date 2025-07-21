@@ -35,11 +35,17 @@ def decode_header_safe(header):
         # Fallback to raw header if decoding fails
         return str(header)
 
-def clean_email_body(email_body: str) -> str:
+def clean_email_body(email_body: str, max_length: int = 300) -> str:
     """
-    Clean the email body by removing HTML tags and excessive whitespace.
+    Clean the email body by removing HTML tags, excessive whitespace, and limit length.
     """
+    if not email_body:
+        return ""
+    
     try:
+        # Handle encoding issues by replacing problematic characters
+        email_body = email_body.encode('utf-8', errors='replace').decode('utf-8')
+        
         soup = BeautifulSoup(email_body, "html.parser")
         text = soup.get_text(separator=" ")  # Get text with spaces instead of <br/>
     except Exception as e:
@@ -48,10 +54,22 @@ def clean_email_body(email_body: str) -> str:
 
     # Remove excessive whitespace and newlines
     text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Remove common problematic unicode characters
+    text = re.sub(r'[\u200c\u200d\u00ad]+', '', text)  # Remove zero-width and soft hyphen chars
+    text = re.sub(r'[^\x00-\x7F\u00A0-\u024F\u1E00-\u1EFF]+', ' ', text)  # Keep basic Latin chars
+    
+    # Truncate if too long, keeping first part which usually has most important content
+    if len(text) > max_length:
+        text = text[:max_length] + "... [Content truncated for processing]"
+    
     return text
 
 class GmailToolBase(BaseTool):
     """Base class for Gmail tools, handling connection and credentials."""
+    
+    name: str = "gmail_tool_base"
+    description: str = "Base class for Gmail tools"
     
     class Config:
         arbitrary_types_allowed = True
@@ -59,8 +77,8 @@ class GmailToolBase(BaseTool):
     email_address: Optional[str] = Field(None, description="Gmail email address")
     app_password: Optional[str] = Field(None, description="Gmail app password")
 
-    def __init__(self, description: str = ""):
-        super().__init__(description=description)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.email_address = os.environ.get("EMAIL_ADDRESS")
         self.app_password = os.environ.get("APP_PASSWORD")
 
@@ -195,15 +213,29 @@ class GetUnreadEmailsTool(GmailToolBase):
                 date_str = msg.get("Date", "")
                 received_date = self._parse_email_date(date_str)
                 
-                # Get the current message body
+                # Get the current message body (limit to 1500 chars to prevent context overflow)
                 current_body = self._extract_body(msg)
+                if len(current_body) > 1500:
+                    current_body = current_body[:1500] + "... [Message truncated]"
                 
-                # Get thread messages
+                # Get thread messages (limit to 2 previous messages max, 500 chars each)
                 thread_messages = self._get_thread_messages(mail, msg)
+                if thread_messages:
+                    # Limit to 2 most recent thread messages
+                    thread_messages = thread_messages[:2]
+                    # Truncate each thread message
+                    thread_messages = [msg[:500] + "... [Truncated]" if len(msg) > 500 else msg for msg in thread_messages]
                 
-                # Combine current message with thread history
-                full_body = "\n\n--- Previous Messages ---\n".join([current_body] + thread_messages)
-
+                # Combine current message with limited thread history
+                if thread_messages:
+                    full_body = current_body + "\n\n--- Previous Messages (Limited) ---\n" + "\n".join(thread_messages)
+                else:
+                    full_body = current_body
+                
+                # Final length check - ensure total doesn't exceed 2500 chars
+                if len(full_body) > 2500:
+                    full_body = full_body[:2500] + "... [Content truncated for processing]"
+                
                 # Get thread metadata
                 thread_info = {
                     'message_id': msg.get('Message-ID', ''),
@@ -268,14 +300,7 @@ class SaveDraftTool(BaseTool):
     args_schema: Type[BaseModel] = SaveDraftSchema
 
     def _format_body(self, body: str) -> str:
-        """Format the email body with signature."""
-        # Replace [Your name] or [Your Name] with Tony Kipkemboi
-        body = re.sub(r'\[Your [Nn]ame\]', 'Tony Kipkemboi', body)
-        
-        # If no placeholder was found, append the signature
-        if '[Your' not in body and '[your' not in body:
-            body = f"{body}\n\nBest regards,\nTony Kipkemboi"
-        
+        """Format the email body."""
         return body
 
     def _connect(self):

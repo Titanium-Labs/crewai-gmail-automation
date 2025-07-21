@@ -1,0 +1,74 @@
+[
+  {
+    "id": "6f1cc5f9-68c4-4d11-ad8f-b480813446ba",
+    "timestamp": "2025-07-17T18:37:11.752830",
+    "type": "Processing",
+    "message": "Email processing failed: litellm.InternalServerError: InternalServerError: OpenAIException - Connection error.",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 1, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "user_zhQ7K854ngI_0562d940",
+    "resolved": false
+  },
+  {
+    "id": "2b740f41-639e-415b-bad6-508b2ae6e652",
+    "timestamp": "2025-07-17T18:37:10.611569",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.InternalServerError: InternalServerError: OpenAIException - Connection error.",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 1, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI_0562d940",
+    "resolved": false
+  },
+  {
+    "id": "1d035258-01c7-49ad-9c2d-1f0595a041a7",
+    "timestamp": "2025-07-17T18:31:33.895356",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.InternalServerError: InternalServerError: OpenAIException - Connection error.",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI_df58c6d4",
+    "resolved": false
+  },
+  {
+    "id": "95de6fb0-b689-497b-b2e8-d636ade14195",
+    "timestamp": "2025-07-17T18:31:33.706386",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.InternalServerError: InternalServerError: OpenAIException - Connection error.",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI_0b47b15d",
+    "resolved": false
+  },
+  {
+    "id": "921e95c4-53fb-40d6-b691-1e35f12380a6",
+    "timestamp": "2025-07-17T18:30:56.491044",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.InternalServerError: InternalServerError: OpenAIException - Connection error.",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI_fed93fab",
+    "resolved": false
+  },
+  {
+    "id": "901e4fc3-4e0b-4b28-8d68-0d7248e4560c",
+    "timestamp": "2025-07-17T17:52:30.291091",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: cannot schedule new futures after shutdown",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI_ffaa8044",
+    "resolved": false
+  },
+  {
+    "id": "e58cb074-010e-4ba7-a1ec-373154b0cbf2",
+    "timestamp": "2025-07-17T17:43:24.967921",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: cannot schedule new futures after shutdown",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI_d46ca893",
+    "resolved": false
+  },
+  {
+    "id": "0f9fb46e-2931-4061-8074-12c892601a0b",
+    "timestamp": "2025-07-17T17:40:03.628076",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: cannot schedule new futures after shutdown",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI_ac64aec4",
+    "resolved": false
+  }
+]
