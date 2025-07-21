@@ -2152,7 +2152,7 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
                 pass
         
         # Compact stats display with custom styling
-        st.markdown("""
+        stats_html = f"""
         <style>
         .stats-container {{
             display: flex;
@@ -2190,23 +2190,24 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
         
         <div class="stats-container">
             <div class="stat-item">
-                <div class="stat-number stat-total">{}</div>
+                <div class="stat-number stat-total">{total_processed}</div>
                 <div class="stat-label">Total Processed</div>
             </div>
             <div class="stat-item">
-                <div class="stat-number stat-high">{}</div>
+                <div class="stat-number stat-high">{high_priority}</div>
                 <div class="stat-label">High Priority</div>
             </div>
             <div class="stat-item">
-                <div class="stat-number stat-medium">{}</div>
+                <div class="stat-number stat-medium">{medium_priority}</div>
                 <div class="stat-label">Medium Priority</div>
             </div>
             <div class="stat-item">
-                <div class="stat-number stat-low">{}</div>
+                <div class="stat-number stat-low">{low_priority}</div>
                 <div class="stat-label">Low Priority</div>
             </div>
         </div>
-        """.format(total_processed, high_priority, medium_priority, low_priority), unsafe_allow_html=True)
+        """
+        st.markdown(stats_html, unsafe_allow_html=True)
     
     # Initialize session state if not exists
     if 'gmail_search' not in st.session_state:
