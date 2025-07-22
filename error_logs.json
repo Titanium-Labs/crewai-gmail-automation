@@ -1,14 +1,5 @@
 [
   {
-    "id": "6f1cc5f9-68c4-4d11-ad8f-b480813446ba",
-    "timestamp": "2025-07-17T18:37:11.752830",
-    "type": "Processing",
-    "message": "Email processing failed: litellm.InternalServerError: InternalServerError: OpenAIException - Connection error.",
-    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 1, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
-    "user_id": "user_zhQ7K854ngI_0562d940",
-    "resolved": false
-  },
-  {
     "id": "2b740f41-639e-415b-bad6-508b2ae6e652",
     "timestamp": "2025-07-17T18:37:10.611569",
     "type": "CrewAI",
