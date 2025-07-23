@@ -2,6 +2,7 @@
 import os
 import json
 from datetime import datetime, date
+from typing import Dict, Any
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task, before_kickoff
 
@@ -13,13 +14,20 @@ from gmail_crew_ai.tools import (
 	EmptyTrashTool
 )
 from gmail_crew_ai.tools.file_tools import FileReadTool
+from gmail_crew_ai.tools.enhanced_tools_config import enhanced_tools_config
 from gmail_crew_ai.models import EmailDetails, CategorizedEmailsList, OrganizedEmailsList, EmailResponsesList, EmailCleanupReport
 
 @CrewBase
 class GmailCrewAi():
-	"""Crew that processes emails."""
+	"""Enhanced Gmail Crew with powerful CrewAI tools."""
 	agents_config = 'config/agents.yaml'
 	tasks_config = 'config/tasks.yaml'
+
+	def __init__(self):
+		"""Initialize the crew and display available tools."""
+		super().__init__()
+		# Display available enhanced tools
+		enhanced_tools_config.print_available_tools()
 
 	@before_kickoff
 	def fetch_emails(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -34,8 +42,13 @@ class GmailCrewAi():
 		os.makedirs("output", exist_ok=True)
 		
 		# Use the GetUnreadEmailsTool directly
-		email_tool = GetUnreadEmailsTool()
-		email_tuples = email_tool._run(limit=email_limit)
+		try:
+			email_tool = GetUnreadEmailsTool()
+			email_tuples = email_tool._run(limit=email_limit)
+		except Exception as e:
+			print(f"Warning: Could not initialize Gmail tool: {e}")
+			print("Using empty email list for demo purposes")
+			email_tuples = []
 		
 		# Convert email tuples to EmailDetails objects with pre-calculated ages
 		emails = []
@@ -77,37 +90,41 @@ class GmailCrewAi():
 
 	@agent
 	def categorizer(self) -> Agent:
-		"""The email categorizer agent."""
+		"""The enhanced email categorizer agent with advanced analysis tools."""
+		tools = enhanced_tools_config.get_categorizer_tools()
 		return Agent(
-			config=self.agents_config['categorizer'],
-			tools=[FileReadTool()],
+			**self.agents_config['categorizer'],
+			tools=tools,
 			llm=self.llm,
 		)
 
 	@agent
 	def organizer(self) -> Agent:
-		"""The email organization agent."""
+		"""The enhanced email organization agent with search capabilities."""
+		tools = enhanced_tools_config.get_organizer_tools()
 		return Agent(
-			config=self.agents_config['organizer'],
-			tools=[GmailOrganizeTool(), FileReadTool()],
+			**self.agents_config['organizer'],
+			tools=tools,
 			llm=self.llm,
 		)
 		
 	@agent
 	def response_generator(self) -> Agent:
-		"""The email response generator agent."""
+		"""The enhanced email response generator with research and AI capabilities."""
+		tools = enhanced_tools_config.get_response_generator_tools()
 		return Agent(
-			config=self.agents_config['response_generator'],
-			tools=[SaveDraftTool()],
+			**self.agents_config['response_generator'],
+			tools=tools,
 			llm=self.llm,
 		)
 
 	@agent
 	def cleaner(self) -> Agent:
-		"""The email cleanup agent."""
+		"""The enhanced email cleanup agent with document analysis tools."""
+		tools = enhanced_tools_config.get_cleaner_tools()
 		return Agent(
-			config=self.agents_config['cleaner'],
-			tools=[GmailDeleteTool(), EmptyTrashTool()],
+			**self.agents_config['cleaner'],
+			tools=tools,
 			llm=self.llm,
 		)
 
@@ -145,7 +162,8 @@ class GmailCrewAi():
 
 	@crew
 	def crew(self) -> Crew:
-		"""Creates the email processing crew."""
+		"""Creates the enhanced email processing crew with powerful tools."""
+		print("\n🚀 Starting Enhanced Gmail Crew with CrewAI Tools")
 		return Crew(
 			agents=self.agents,
 			tasks=self.tasks,
