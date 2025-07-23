@@ -1379,44 +1379,38 @@ def show_login_page():
         
         if not has_primary:
             # No primary user yet - show first-time setup
-            st.info(" Welcome to Gmail CrewAI! This appears to be a fresh installation.")
+            st.info("🎉 Welcome to Gmail CrewAI! This appears to be a fresh installation.")
             st.markdown("**First Time Setup**")
-            st.markdown("The first user to register will become the **primary owner** with full administrative access.")
-            
-            # Only show registration tab for first user
-            email_register = st.text_input("Email address", placeholder="your-email@example.com", key="register_email")
+            st.markdown("The first person to authenticate will become the **primary owner** with full administrative access.")
             
             st.markdown("**Why do you need access?**")
-            reason = st.text_area("Brief explanation", placeholder="I need to automate my work email management...")
+            reason = st.text_area("Brief explanation", placeholder="I need to automate my work email management...", key="setup_reason")
             
-            if st.button(" Setup as Primary Owner", type="primary", use_container_width=True):
-                if email_register and reason:
-                    handle_registration_request(email_register, reason)
+            if st.button("🔗 Setup as Primary Owner with Gmail", type="primary", use_container_width=True):
+                if reason.strip():
+                    handle_direct_primary_setup(reason)
                 else:
-                    st.error("Please fill in all fields")
+                    st.error("Please provide a brief explanation")
         else:
             # Normal login/registration flow when primary user exists
             tab1, tab2 = st.tabs([" Login", " Register"])
             
             with tab1:
                 st.markdown("**Existing Users**")
-                email_login = st.text_input("Email address", placeholder="your-email@example.com", key="login_email")
+                st.markdown("Click below to authenticate with your Gmail account:")
                 
-                col_login1, col_login2 = st.columns(2)
-                with col_login1:
-                    if st.button(" Login with Google", type="primary", use_container_width=True):
-                        if email_login:
-                            handle_google_login(email_login)
-                        else:
-                            st.error("Please enter your email address")
+                # Gmail login button with icon
+                if st.button("🔗 Login with Gmail", type="primary", use_container_width=True):
+                    handle_direct_google_login()
                 
-                with col_login2:
-                    if st.button(" Request Help", use_container_width=True):
-                        primary_user = user_manager.get_primary_user()
-                        if primary_user:
-                            st.info(f"Contact the primary owner ({primary_user['email']}) if you need access or have login issues.")
-                        else:
-                            st.info("Contact your administrator if you need access or have login issues.")
+                # Help section
+                st.markdown("---")
+                if st.button("❓ Need Help?", use_container_width=True):
+                    primary_user = user_manager.get_primary_user()
+                    if primary_user:
+                        st.info(f"📧 Contact the primary owner ({primary_user['email']}) if you need access or have login issues.")
+                    else:
+                        st.info("📧 Contact your administrator if you need access or have login issues.")
             
             with tab2:
                 st.markdown("**New Users**")
@@ -1439,8 +1433,62 @@ def show_login_page():
     """, unsafe_allow_html=True)
 
 
+def handle_direct_google_login():
+    """Handle direct Google login without pre-entering email."""
+    try:
+        # Generate unique OAuth user ID for this session
+        oauth_user_id = f"login_{uuid.uuid4().hex[:8]}"
+        auth_url = st.session_state.oauth_manager.get_authorization_url(oauth_user_id)
+        
+        st.session_state.pending_oauth_user_id = oauth_user_id
+        st.session_state.authentication_step = 'google_oauth'
+        
+        # Automatically redirect to Google OAuth
+        components.html(
+            f"""
+            <script>
+                window.open('{auth_url}', '_blank');
+            </script>
+            """,
+            height=0,
+        )
+        st.success("🔗 Opening Google authentication in a new tab...")
+        st.info("📋 After authentication, we'll check if your account is registered and approved.")
+        
+    except Exception as e:
+        st.error(f"❌ Error starting Google authentication: {e}")
+
+
+def handle_direct_primary_setup(reason):
+    """Handle primary owner setup with OAuth2 authentication."""
+    try:
+        # Generate unique OAuth user ID for primary setup
+        oauth_user_id = f"primary_setup_{uuid.uuid4().hex[:8]}"
+        auth_url = st.session_state.oauth_manager.get_authorization_url(oauth_user_id)
+        
+        # Store the reason for the callback handler
+        st.session_state.pending_primary_reason = reason
+        st.session_state.pending_oauth_user_id = oauth_user_id
+        st.session_state.authentication_step = 'google_oauth'
+        
+        # Automatically redirect to Google OAuth
+        components.html(
+            f"""
+            <script>
+                window.open('{auth_url}', '_blank');
+            </script>
+            """,
+            height=0,
+        )
+        st.success("🔗 Opening Google authentication in a new tab...")
+        st.info("👑 After authentication, you'll be set up as the primary owner.")
+        
+    except Exception as e:
+        st.error(f"❌ Error starting Google authentication: {e}")
+
+
 def handle_google_login(email: str):
-    """Handle Google login process."""
+    """Handle Google login process (legacy function for compatibility)."""
     user_manager = st.session_state.user_manager
     user_id, user_data = user_manager.get_user_by_email(email)
     
@@ -4164,42 +4212,118 @@ def main():
             # Complete OAuth authentication automatically
             try:
                 if st.session_state.oauth_manager.handle_oauth_callback(oauth_user_id, auth_code):
-                    # Extract the original user ID from the OAuth user ID
-                    # OAuth user ID format: user_zhQ7K854ngI_a1b2c3d4
-                    # We need to extract: user_zhQ7K854ngI
-                    if '_' in oauth_user_id:
-                        # Split by underscore and take all parts except the last (which is the random suffix)
-                        parts = oauth_user_id.split('_')
-                        if len(parts) >= 3:  # user_id_suffix format
-                            authenticated_user_id = '_'.join(parts[:-1])  # Join all but last part
+                    # Check flow type based on oauth_user_id prefix
+                    if oauth_user_id.startswith("primary_setup_"):
+                        # Primary owner setup - get email and create as primary user
+                        try:
+                            authenticated_email = st.session_state.oauth_manager.get_user_email()
+                            reason = st.session_state.get('pending_primary_reason', 'Primary owner setup')
+                            
+                            # Create the primary user
+                            new_user_id = user_manager.create_user(
+                                email=authenticated_email,
+                                reason=reason,
+                                is_primary=True
+                            )
+                            
+                            # Auto-approve since this is the primary owner
+                            user_manager.approve_user(new_user_id)
+                            user_manager.update_last_login(new_user_id)
+                            
+                            st.session_state.oauth_result = "success"
+                            st.session_state.authenticated_user_id = new_user_id
+                            st.session_state.current_user = oauth_user_id
+                            st.session_state.authentication_step = 'dashboard'
+                            
+                            # Create persistent session (7-day login)
+                            session_token = session_manager.create_session(new_user_id)
+                            session_manager.set_browser_session(session_token)
+                            
+                            # Clean up pending state
+                            if 'pending_oauth_user_id' in st.session_state:
+                                del st.session_state.pending_oauth_user_id
+                            if 'pending_primary_reason' in st.session_state:
+                                del st.session_state.pending_primary_reason
+                                
+                        except Exception as e:
+                            st.session_state.oauth_result = "failed"
+                            st.session_state.oauth_error = f"Error setting up primary owner: {e}"
+                            st.session_state.authentication_step = 'login'
+                    elif oauth_user_id.startswith("login_"):
+                        # Direct login - get email from OAuth manager and check if user exists
+                        try:
+                            authenticated_email = st.session_state.oauth_manager.get_user_email()
+                            user_id, user_data = user_manager.get_user_by_email(authenticated_email)
+                            
+                            if user_data:
+                                if user_data.get('status') == 'approved':
+                                    # User exists and is approved - log them in
+                                    user_manager.update_last_login(user_id)
+                                    
+                                    st.session_state.oauth_result = "success"
+                                    st.session_state.authenticated_user_id = user_id
+                                    st.session_state.current_user = oauth_user_id
+                                    st.session_state.authentication_step = 'dashboard'
+                                    
+                                    # Create persistent session (7-day login)
+                                    session_token = session_manager.create_session(user_id)
+                                    session_manager.set_browser_session(session_token)
+                                    
+                                    # Clean up pending state
+                                    if 'pending_oauth_user_id' in st.session_state:
+                                        del st.session_state.pending_oauth_user_id
+                                elif user_data.get('status') == 'pending':
+                                    st.session_state.oauth_result = "failed"
+                                    st.session_state.oauth_error = f"Your account ({authenticated_email}) is pending approval from the primary owner."
+                                    st.session_state.authentication_step = 'login'
+                                else:
+                                    st.session_state.oauth_result = "failed"
+                                    st.session_state.oauth_error = f"Your account ({authenticated_email}) has been rejected. Contact the primary owner."
+                                    st.session_state.authentication_step = 'login'
+                            else:
+                                # User doesn't exist - suggest registration
+                                st.session_state.oauth_result = "failed"
+                                st.session_state.oauth_error = f"Account ({authenticated_email}) not found. Please register first or contact the primary owner for access."
+                                st.session_state.authentication_step = 'login'
+                        except Exception as e:
+                            st.session_state.oauth_result = "failed" 
+                            st.session_state.oauth_error = f"Could not get user email from authentication: {e}"
+                            st.session_state.authentication_step = 'login'
+                    else:
+                        # Legacy login flow - extract user ID from OAuth user ID
+                        if '_' in oauth_user_id:
+                            # Split by underscore and take all parts except the last (which is the random suffix)
+                            parts = oauth_user_id.split('_')
+                            if len(parts) >= 3:  # user_id_suffix format
+                                authenticated_user_id = '_'.join(parts[:-1])  # Join all but last part
+                            else:
+                                authenticated_user_id = oauth_user_id  # Fallback if format is unexpected
                         else:
-                            authenticated_user_id = oauth_user_id  # Fallback if format is unexpected
-                    else:
-                        authenticated_user_id = oauth_user_id  # Fallback if no underscore
-                    
-                    # Verify this user exists in our system
-                    user_data = user_manager.get_user_by_id(authenticated_user_id)
-                    if user_data and user_data.get('status') == 'approved':
-                        user_manager.update_last_login(authenticated_user_id)
+                            authenticated_user_id = oauth_user_id  # Fallback if no underscore
                         
-                        st.session_state.oauth_result = "success"
-                        st.session_state.authenticated_user_id = authenticated_user_id
-                        st.session_state.current_user = oauth_user_id
-                        st.session_state.authentication_step = 'dashboard'
-                        
-                        # Create persistent session (7-day login)
-                        session_token = session_manager.create_session(authenticated_user_id)
-                        session_manager.set_browser_session(session_token)
-                        
-                        # Clean up pending state (if any)
-                        if 'pending_login_user_id' in st.session_state:
-                            del st.session_state.pending_login_user_id
-                        if 'pending_oauth_user_id' in st.session_state:
-                            del st.session_state.pending_oauth_user_id
-                    else:
-                        st.session_state.oauth_result = "failed"
-                        st.session_state.oauth_error = "User not found or not approved"
-                        st.session_state.authentication_step = 'login'
+                        # Verify this user exists in our system
+                        user_data = user_manager.get_user_by_id(authenticated_user_id)
+                        if user_data and user_data.get('status') == 'approved':
+                            user_manager.update_last_login(authenticated_user_id)
+                            
+                            st.session_state.oauth_result = "success"
+                            st.session_state.authenticated_user_id = authenticated_user_id
+                            st.session_state.current_user = oauth_user_id
+                            st.session_state.authentication_step = 'dashboard'
+                            
+                            # Create persistent session (7-day login)
+                            session_token = session_manager.create_session(authenticated_user_id)
+                            session_manager.set_browser_session(session_token)
+                            
+                            # Clean up pending state (if any)
+                            if 'pending_login_user_id' in st.session_state:
+                                del st.session_state.pending_login_user_id
+                            if 'pending_oauth_user_id' in st.session_state:
+                                del st.session_state.pending_oauth_user_id
+                        else:
+                            st.session_state.oauth_result = "failed"
+                            st.session_state.oauth_error = "User not found or not approved"
+                            st.session_state.authentication_step = 'login'
                 else:
                     st.session_state.oauth_result = "failed"
                     st.session_state.oauth_error = "Authentication failed"
