@@ -2417,28 +2417,50 @@ def show_rules_tab(user_id: str, oauth_manager: OAuth2Manager):
             
             # Quick condition builders
             st.markdown("**Quick Builders:**")
-            quick_col1, quick_col2, quick_col3 = st.columns(3)
+            quick_row1_col1, quick_row1_col2 = st.columns(2)
+            quick_row2_col1, quick_row2_col2 = st.columns(2)
             
-            with quick_col1:
-                if st.button(" From Sender", help="Add from: filter"):
-                    sender = st.text_input("Sender email:", key="quick_sender")
-                    if sender:
+            # Row 1: From and To fields
+            with quick_row1_col1:
+                st.markdown("**📧 From Sender**")
+                sender_input = st.text_input("Sender email:", placeholder="sender@example.com", key="quick_sender")
+                if st.button("➕ Add From Filter", key="add_from", use_container_width=True):
+                    if sender_input:
                         current = gmail_condition or ""
-                        gmail_condition = f"{current} from:{sender}".strip()
+                        new_condition = f"from:{sender_input}"
+                        gmail_condition = f"{current} {new_condition}".strip()
+                        st.success(f"Added: {new_condition}")
             
-            with quick_col2:
-                if st.button(" Subject", help="Add subject: filter"):
-                    subject = st.text_input("Subject contains:", key="quick_subject")
-                    if subject:
+            with quick_row1_col2:
+                st.markdown("**📨 To Recipient**")
+                recipient_input = st.text_input("Recipient email:", placeholder="recipient@example.com", key="quick_recipient")
+                if st.button("➕ Add To Filter", key="add_to", use_container_width=True):
+                    if recipient_input:
                         current = gmail_condition or ""
-                        gmail_condition = f"{current} subject:{subject}".strip()
+                        new_condition = f"to:{recipient_input}"
+                        gmail_condition = f"{current} {new_condition}".strip()
+                        st.success(f"Added: {new_condition}")
             
-            with quick_col3:
-                if st.button(" Label", help="Add label: filter"):
-                    label = st.text_input("Label name:", key="quick_label")
-                    if label:
+            # Row 2: Subject and Label fields
+            with quick_row2_col1:
+                st.markdown("**📋 Subject**")
+                subject_input = st.text_input("Subject contains:", placeholder="keyword", key="quick_subject")
+                if st.button("➕ Add Subject Filter", key="add_subject", use_container_width=True):
+                    if subject_input:
                         current = gmail_condition or ""
-                        gmail_condition = f"{current} label:{label}".strip()
+                        new_condition = f"subject:{subject_input}"
+                        gmail_condition = f"{current} {new_condition}".strip()
+                        st.success(f"Added: {new_condition}")
+            
+            with quick_row2_col2:
+                st.markdown("**🏷️ Label**")
+                label_input = st.text_input("Label name:", placeholder="important", key="quick_label")
+                if st.button("➕ Add Label Filter", key="add_label", use_container_width=True):
+                    if label_input:
+                        current = gmail_condition or ""
+                        new_condition = f"label:{label_input}"
+                        gmail_condition = f"{current} {new_condition}".strip()
+                        st.success(f"Added: {new_condition}")
         
         with col2:
             # Rule actions
