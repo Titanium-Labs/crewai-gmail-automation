@@ -1,5 +1,4 @@
 crewai==0.148.0
-crewai-tools==0.47.0
 google-auth-oauthlib==1.2.1
 google-auth-httplib2==0.2.0
 google-api-python-client==2.159.0

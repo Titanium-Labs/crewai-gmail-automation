@@ -14,189 +14,157 @@ from gmail_crew_ai.tools import (
 	EmptyTrashTool
 )
 from gmail_crew_ai.tools.file_tools import FileReadTool
-from gmail_crew_ai.tools.enhanced_tools_config import enhanced_tools_config
+from gmail_crew_ai.tools.enhanced_tools_config import basic_tools_config
 from gmail_crew_ai.models import EmailDetails, CategorizedEmailsList, OrganizedEmailsList, EmailResponsesList, EmailCleanupReport
 
 @CrewBase
 class GmailCrewAi():
-	"""Enhanced Gmail Crew with powerful CrewAI tools."""
+	"""Gmail Crew with basic tools (without embedchain dependency)."""
 	agents_config = 'config/agents.yaml'
 	tasks_config = 'config/tasks.yaml'
 
 	def __init__(self):
 		"""Initialize the crew and display available tools."""
-		super().__init__()
-		# Display available enhanced tools
-		enhanced_tools_config.print_available_tools()
+		print("\n🚀 INITIALIZING GMAIL CREW AI")
+		print("=" * 50)
+		print("📧 Gmail automation with basic tools")
+		print("⚠️  Note: Advanced tools disabled due to embedchain dependency conflicts")
+		print("=" * 50)
 
-	@before_kickoff
-	def fetch_emails(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-		"""Fetch emails before starting the crew and calculate ages."""
-		print("Fetching emails before starting the crew...")
-		
-		# Get the email limit from inputs
-		email_limit = inputs.get('email_limit', 5)
-		print(f"Fetching {email_limit} emails...")
-		
-		# Create the output directory if it doesn't exist
-		os.makedirs("output", exist_ok=True)
-		
-		# Use the GetUnreadEmailsTool directly
-		try:
-			email_tool = GetUnreadEmailsTool()
-			email_tuples = email_tool._run(limit=email_limit)
-		except Exception as e:
-			print(f"Warning: Could not initialize Gmail tool: {e}")
-			print("Using empty email list for demo purposes")
-			email_tuples = []
-		
-		# Convert email tuples to EmailDetails objects with pre-calculated ages
-		emails = []
-		today = date.today()
-		for email_tuple in email_tuples:
-			email_detail = EmailDetails.from_email_tuple(email_tuple)
-			
-			# Limit body content to prevent context overflow when agents process the file
-			if email_detail.body and len(email_detail.body) > 300:
-				email_detail.body = email_detail.body[:300] + "... [Body limited for processing efficiency]"
-			
-			# Calculate age if date is available
-			if email_detail.date:
-				try:
-					email_date_obj = datetime.strptime(email_detail.date, "%Y-%m-%d").date()
-					email_detail.age_days = (today - email_date_obj).days
-					print(f"Email date: {email_detail.date}, age: {email_detail.age_days} days")
-				except Exception as e:
-					print(f"Error calculating age for email date {email_detail.date}: {e}")
-					email_detail.age_days = None
-			
-			emails.append(email_detail.dict())
-		
-		# Ensure output directory exists
-		os.makedirs('output', exist_ok=True)
-		
-		# Save emails to file with UTF-8 encoding
-		with open('output/fetched_emails.json', 'w', encoding='utf-8') as f:
-			json.dump(emails, f, indent=2, ensure_ascii=False)
-		
-		print(f"Fetched and saved {len(emails)} emails to output/fetched_emails.json")
-		
-		return inputs
-	
 	llm = LLM(
 		model="openai/gpt-4o-mini",
 		api_key=os.getenv("OPENAI_API_KEY"),
 	)
 
+	@before_kickoff
+	def fetch_emails(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+		"""Fetch emails before starting the crew and calculate ages."""
+		print("Fetching emails and calculating ages...")
+		
+		try:
+			# For OAuth2, try to get emails without credentials first
+			tool = GetUnreadEmailsTool()
+			emails_data = tool.run()
+			
+			# Parse the JSON response if it's a string
+			if isinstance(emails_data, str):
+				emails = json.loads(emails_data)
+			else:
+				emails = emails_data
+			
+			# Calculate email ages
+			for email in emails:
+				if 'date' in email:
+					try:
+						email_date = datetime.fromisoformat(email['date'].replace('Z', '+00:00'))
+						age_days = (datetime.now().replace(tzinfo=email_date.tzinfo) - email_date).days
+						email['age_days'] = age_days
+					except Exception as e:
+						print(f"Error calculating age for email: {e}")
+						email['age_days'] = 0
+			
+			# Save to file for agents to read
+			os.makedirs('output', exist_ok=True)
+			with open('output/fetched_emails.json', 'w') as f:
+				json.dump(emails, f, indent=2)
+			
+			print(f"✅ Fetched {len(emails)} emails with age calculations")
+			return inputs
+			
+		except Exception as e:
+			print(f"❌ Error fetching emails: {e}")
+			print("Creating empty email file for demo mode")
+			# Create empty file so agents don't fail
+			os.makedirs('output', exist_ok=True)
+			with open('output/fetched_emails.json', 'w') as f:
+				json.dump([], f)
+			return inputs
+
 	@agent
 	def categorizer(self) -> Agent:
-		"""The enhanced email categorizer agent with advanced analysis tools."""
-		tools = enhanced_tools_config.get_categorizer_tools()
+		"""The email categorizer agent."""
 		return Agent(
-			**self.agents_config['categorizer'],
-			tools=tools,
-			llm=self.llm,
+			config=self.agents_config['categorizer'],
+			tools=basic_tools_config.get_categorizer_tools(),
+			verbose=True,
+			llm=self.llm
 		)
 
 	@agent
 	def organizer(self) -> Agent:
-		"""The enhanced email organization agent with search capabilities."""
-		tools = enhanced_tools_config.get_organizer_tools()
+		"""The email organizer agent."""
 		return Agent(
-			**self.agents_config['organizer'],
-			tools=tools,
-			llm=self.llm,
+			config=self.agents_config['organizer'],
+			tools=basic_tools_config.get_organizer_tools(),
+			verbose=True,
+			llm=self.llm
 		)
-		
+
 	@agent
 	def response_generator(self) -> Agent:
-		"""The enhanced email response generator with research and AI capabilities."""
-		tools = enhanced_tools_config.get_response_generator_tools()
+		"""The email response generator agent."""
 		return Agent(
-			**self.agents_config['response_generator'],
-			tools=tools,
-			llm=self.llm,
+			config=self.agents_config['response_generator'],
+			tools=basic_tools_config.get_response_generator_tools(),
+			verbose=True,
+			llm=self.llm
 		)
 
 	@agent
 	def cleaner(self) -> Agent:
-		"""The enhanced email cleanup agent with document analysis tools."""
-		tools = enhanced_tools_config.get_cleaner_tools()
+		"""The email cleanup specialist agent."""
 		return Agent(
-			**self.agents_config['cleaner'],
-			tools=tools,
-			llm=self.llm,
+			config=self.agents_config['cleaner'],
+			tools=basic_tools_config.get_cleaner_tools(),
+			verbose=True,
+			llm=self.llm
 		)
 
 	@task
 	def categorization_task(self) -> Task:
-		"""The email categorization task."""
+		"""Task for categorizing emails."""
 		return Task(
 			config=self.tasks_config['categorization_task'],
-			output_pydantic=CategorizedEmailsList
+			agent=self.categorizer(),
+			output_file='output/categorized_emails.json'
 		)
-	
+
 	@task
 	def organization_task(self) -> Task:
-		"""The email organization task."""
+		"""Task for organizing emails."""
 		return Task(
 			config=self.tasks_config['organization_task'],
-			output_pydantic=OrganizedEmailsList,
+			agent=self.organizer(),
+			context=[self.categorization_task()],
+			output_file='output/organized_emails.json'
 		)
 
 	@task
 	def response_task(self) -> Task:
-		"""The email response task."""
+		"""Task for generating email responses."""
 		return Task(
 			config=self.tasks_config['response_task'],
-			output_pydantic=EmailResponsesList,
+			agent=self.response_generator(),
+			context=[self.categorization_task(), self.organization_task()],
+			output_file='output/email_responses.json'
 		)
 
 	@task
 	def cleanup_task(self) -> Task:
-		"""The email cleanup task."""
+		"""Task for cleaning up emails."""
 		return Task(
 			config=self.tasks_config['cleanup_task'],
-			output_pydantic=EmailCleanupReport,
+			agent=self.cleaner(),
+			context=[self.categorization_task(), self.organization_task()],
+			output_file='output/cleanup_report.json'
 		)
 
 	@crew
 	def crew(self) -> Crew:
-		"""Creates the enhanced email processing crew with powerful tools."""
-		print("\n🚀 Starting Enhanced Gmail Crew with CrewAI Tools")
+		"""The Gmail automation crew."""
 		return Crew(
 			agents=self.agents,
 			tasks=self.tasks,
 			process=Process.sequential,
-			verbose=True
+			verbose=True,
 		)
-
-	def _debug_callback(self, event_type, payload):
-		"""Debug callback for crew events."""
-		if event_type == "task_start":
-			print(f"DEBUG: Starting task: {payload.get('task_name')}")
-		elif event_type == "task_end":
-			print(f"DEBUG: Finished task: {payload.get('task_name')}")
-			print(f"DEBUG: Task output type: {type(payload.get('output'))}")
-			
-			# Add more detailed output inspection
-			output = payload.get('output')
-			if output:
-				if isinstance(output, dict):
-					print(f"DEBUG: Output keys: {output.keys()}")
-					for key, value in output.items():
-						print(f"DEBUG: {key}: {value[:100] if isinstance(value, str) and len(value) > 100 else value}")
-				elif isinstance(output, list):
-					print(f"DEBUG: Output list length: {len(output)}")
-					if output and len(output) > 0:
-						print(f"DEBUG: First item type: {type(output[0])}")
-						if isinstance(output[0], dict):
-							print(f"DEBUG: First item keys: {output[0].keys()}")
-				else:
-					print(f"DEBUG: Output: {str(output)[:200]}...")
-		elif event_type == "agent_start":
-			print(f"DEBUG: Agent starting: {payload.get('agent_name')}")
-		elif event_type == "agent_end":
-			print(f"DEBUG: Agent finished: {payload.get('agent_name')}")
-		else:
-			print(f"DEBUG: Event {event_type}: {payload}")
