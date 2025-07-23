@@ -246,14 +246,32 @@ class OAuth2GmailCrewAi:
         )
 
     def get_user_email(self) -> str:
-        """Get the user's email address from OAuth2 credentials."""
+        """Get user email from OAuth2 manager."""
+        if not OAUTH2_AVAILABLE or not self.oauth_manager:
+            return "unknown@user.com"
+            
         try:
-            creds = self.oauth_manager.get_credentials(self.user_id)
-            if creds and hasattr(creds, 'id_token'):
-                # Extract email from ID token if available
-                import jwt
-                decoded = jwt.decode(creds.id_token, options={"verify_signature": False})
-                return decoded.get('email', f"user_{self.user_id}@oauth.local")
-        except:
-            pass
-        return f"user_{self.user_id}@oauth.local" 
+            return self.oauth_manager.get_user_email()
+        except Exception as e:
+            print(f"⚠️ Error getting user email: {e}")
+            return "unknown@user.com"
+
+
+def create_crew_for_user(user_id: str, oauth_manager) -> OAuth2GmailCrewAi:
+    """Create and configure a crew for a specific user with OAuth2 authentication.
+    
+    Args:
+        user_id: The unique identifier for the user
+        oauth_manager: The OAuth2Manager instance for the user
+        
+    Returns:
+        OAuth2GmailCrewAi: Configured crew instance for the user
+    """
+    # Create a new crew instance
+    crew_instance = OAuth2GmailCrewAi()
+    
+    # Set the OAuth2 manager for this specific user
+    crew_instance.oauth_manager = oauth_manager
+    crew_instance.user_id = user_id
+    
+    return crew_instance 
