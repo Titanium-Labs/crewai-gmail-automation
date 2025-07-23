@@ -1373,12 +1373,6 @@ def show_login_page():
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col2:
-        # Check if user has OAuth2 credentials set up
-        if not os.path.exists("credentials.json"):
-            st.error(" OAuth2 credentials file not found!")
-            st.markdown("Please contact your administrator to set up Google OAuth2 credentials.")
-            return
-        
         # Check if we have a primary user
         user_manager = st.session_state.user_manager
         has_primary = user_manager.has_primary_user()
@@ -1834,30 +1828,10 @@ def show_admin_panel():
 
 
 def show_setup_instructions():
-    """Show OAuth2 setup instructions."""
-    if not os.path.exists("credentials.json"):
-        st.error(" OAuth2 credentials file not found!")
-        st.markdown(OAuth2Manager.setup_instructions())
-        
-        uploaded_file = st.file_uploader(
-            "Upload your credentials.json file:", 
-            type=['json'],
-            help="Download this from Google Cloud Console"
-        )
-        
-        if uploaded_file is not None:
-            try:
-                credentials_data = json.load(uploaded_file)
-                with open("credentials.json", "w") as f:
-                    json.dump(credentials_data, f, indent=2)
-                st.success(" Credentials file saved successfully!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error saving credentials: {e}")
-        
-        return False
-    else:
-        return True
+    """OAuth2 setup is handled automatically - no user setup required."""
+    # Always return True to continue with normal app flow
+    # OAuth2 credentials are handled automatically by the OAuth2Manager
+    return True
 
 
 def show_user_selection():
