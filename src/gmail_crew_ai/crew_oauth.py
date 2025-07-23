@@ -47,19 +47,23 @@ class OAuth2GmailCrewAi:
     agents_config = 'config/agents.yaml'
     tasks_config = 'config/tasks.yaml'
 
-    def __init__(self):
+    def __init__(self, user_id=None, oauth_manager=None):
         """Initialize crew with OAuth2 authentication."""
-        self.user_id = os.environ.get("CURRENT_USER_ID")
+        # Use provided parameters or fall back to environment variable
+        self.user_id = user_id or os.environ.get("CURRENT_USER_ID")
+        self.oauth_manager = oauth_manager
         
         if not self.user_id:
-            raise ValueError("CURRENT_USER_ID environment variable must be set for OAuth2 authentication")
+            raise ValueError("User ID must be provided either as parameter or CURRENT_USER_ID environment variable")
             
         print(f"🔐 Using OAuth2 authentication for user: {self.user_id}")
         
         if not OAUTH2_AVAILABLE:
             raise ImportError("OAuth2Manager not available. Please check your OAuth2 setup.")
             
-        self.oauth_manager = OAuth2Manager()
+        # Initialize OAuth2Manager if not provided
+        if not self.oauth_manager:
+            self.oauth_manager = OAuth2Manager()
 
     def _get_gmail_tools(self):
         """Get OAuth2 Gmail tools."""
@@ -266,11 +270,7 @@ def create_crew_for_user(user_id: str, oauth_manager) -> OAuth2GmailCrewAi:
     Returns:
         OAuth2GmailCrewAi: Configured crew instance for the user
     """
-    # Create a new crew instance
-    crew_instance = OAuth2GmailCrewAi()
-    
-    # Set the OAuth2 manager for this specific user
-    crew_instance.oauth_manager = oauth_manager
-    crew_instance.user_id = user_id
+    # Create a new crew instance with the user_id and oauth_manager
+    crew_instance = OAuth2GmailCrewAi(user_id=user_id, oauth_manager=oauth_manager)
     
     return crew_instance 
