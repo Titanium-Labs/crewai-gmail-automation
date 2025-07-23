@@ -46,20 +46,29 @@ Thumbs.db
 
 # 🔒 SENSITIVE FILES - NEVER COMMIT THESE 🔒
 
-# Google OAuth Client Secrets
+# Google OAuth Client Secrets (Enhanced patterns)
 client_secret*.json
 *.client_secret.json
 credentials.json
 service_account*.json
+google_credentials*.json
+oauth_credentials*.json
+*-credentials.json
 
-# OAuth Tokens and Authentication
+# OAuth Tokens and Authentication (Enhanced patterns)
 tokens/
 *.token.pickle
 *.pickle
 *_token.json
 *_credentials.json
+*.auth
+*.oauth
+*.oauth2
+*_access_token*
+*_refresh_token*
+*_id_token*
 
-# User Data and Sessions
+# User Data and Sessions (Enhanced patterns)
 user_sessions.json
 users.json
 usage.json
@@ -67,47 +76,98 @@ subscriptions.json
 registration_requests.json
 approval_tokens.json
 error_logs.json
+session_*.json
+user_*.json
+auth_*.json
 
-# Stripe and Payment Data
+# Stripe and Payment Data (Enhanced patterns)
 stripe_*.json
 webhook_*.json
 payment_*.json
+billing_*.json
+subscription_*.json
+customer_*.json
 
 # Database files
 *.db
 *.sqlite
 *.sqlite3
 
-# Configuration files that may contain secrets
+# Configuration files that may contain secrets (Enhanced patterns)
 config.json
 settings.json
 secrets.json
 private_*.json
+local_*.json
+prod_*.json
+production_*.json
+staging_*.json
+dev_*.json
+development_*.json
 
 # Log files that may contain sensitive data
 *.log
 logs/
 *.log.*
 
-# Temporary sensitive files
+# Temporary sensitive files (Enhanced patterns)
 temp_*.json
 tmp_*.json
 *.tmp
 *.temp
+*_temp.*
+*_tmp.*
 
-# Backup files that might contain sensitive data
+# Backup files that might contain sensitive data (Enhanced patterns)
 *.bak
 *.backup
 *_backup.*
+*.old
+*_old.*
+*.orig
+*_orig.*
 
-# Any files with 'secret', 'password', 'key', 'token' in name
+# Any files with sensitive keywords in name (Enhanced patterns)
 *secret*
 *password*
 *key*
 *token*
 *credential*
+*auth*
+*oauth*
+*session*
+*cookie*
+*cert*
+*certificate*
+*private*
+*confidential*
+*sensitive*
+
+# Specific Google OAuth patterns we found in cleanup
+*apps.googleusercontent.com*.json
+*oauth2_*
+*gmail_token*
+*google_token*
+
+# Email-specific sensitive files
+*@gmail.com*.pickle
+*@*_token.pickle
+email_*.json
+gmail_*.json
+imap_*.json
+smtp_*.json
 
 # Exclude Stripe CLI executable
 stripe.exe
 stripe
+
+# Additional security patterns
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.key
+*.keystore
+*.jks
 
