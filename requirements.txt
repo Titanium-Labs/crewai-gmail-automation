@@ -1,5 +1,5 @@
 crewai==0.148.0
-crewai-tools==0.55.0
+crewai-tools==0.40.0
 google-auth-oauthlib==1.2.1
 google-auth-httplib2==0.2.0
 google-api-python-client==2.159.0
@@ -11,5 +11,3 @@ beautifulsoup4==4.12.3
 requests==2.32.3
 typing-inspection==0.4.1
 stripe==12.2.0
-# Force compatible embedchain version before crewai-tools
-embedchain==0.0.73
