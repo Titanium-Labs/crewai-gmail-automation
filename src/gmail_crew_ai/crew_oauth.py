@@ -9,7 +9,6 @@ from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, before_kickoff, crew, task
-from crewai_tools import FileReadTool
 
 # OAuth2 Gmail Tools
 try:
