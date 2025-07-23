@@ -1,145 +1,238 @@
+#!/usr/bin/env python3
 """
-Quick setup script for testing Stripe webhooks locally.
-This script will help you test the webhook integration.
+Test script for Stripe webhook functionality.
+This script simulates webhook events that would be sent by Stripe.
 """
 
 import os
-import subprocess
-import sys
-import time
-from pathlib import Path
+import json
+import requests
+from datetime import datetime
 
-def check_stripe_cli():
-    """Check if Stripe CLI is available."""
-    stripe_exe = Path("stripe.exe")
-    if stripe_exe.exists():
-        print("✅ Found stripe.exe in current directory")
-        return "./stripe.exe"
-    else:
-        print("❌ stripe.exe not found in current directory")
-        return None
+# Test configuration
+WEBHOOK_URL = "http://localhost:8501/webhook"  # Streamlit webhook endpoint
+TEST_STRIPE_WEBHOOK_SECRET = "whsec_test_webhook_secret"
 
-def check_env_file():
-    """Check if .env file exists and has necessary variables."""
-    env_file = Path(".env")
-    if not env_file.exists():
-        print("⚠️ .env file not found. Creating a template...")
-        create_env_template()
-        return False
+def test_subscription_created():
+    """Test subscription.created webhook"""
+    print("🧪 Testing subscription.created webhook...")
     
-    # Read and check for required variables
-    with open(env_file, 'r') as f:
-        content = f.read()
+    payload = {
+        "id": "evt_test_subscription_created",
+        "object": "event",
+        "api_version": "2020-08-27",
+        "created": int(datetime.now().timestamp()),
+        "data": {
+            "object": {
+                "id": "sub_test_subscription",
+                "object": "subscription",
+                "customer": "cus_test_customer",
+                "status": "active",
+                "current_period_start": int(datetime.now().timestamp()),
+                "current_period_end": int(datetime.now().timestamp()) + 2592000,  # 30 days
+                "items": {
+                    "object": "list",
+                    "data": [
+                        {
+                            "id": "si_test_item",
+                            "object": "subscription_item",
+                            "price": {
+                                "id": "price_basic_monthly",
+                                "object": "price",
+                                "nickname": "Basic Plan"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "type": "customer.subscription.created"
+    }
     
-    required_vars = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
-    missing_vars = []
+    # Test environment variables (remove EMAIL_ADDRESS, APP_PASSWORD, SLACK_WEBHOOK_URL)
+    test_env = {
+        "OPENAI_API_KEY": "test-openai-key",
+        "STRIPE_SECRET_KEY": "sk_test_your_stripe_secret_key",
+        "STRIPE_PUBLISHABLE_KEY": "pk_test_your_stripe_publishable_key", 
+        "STRIPE_WEBHOOK_SECRET": TEST_STRIPE_WEBHOOK_SECRET,
+        "STRIPE_BASIC_PRICE_ID": "price_basic_monthly",
+        "STRIPE_PREMIUM_PRICE_ID": "price_premium_monthly"
+    }
     
-    for var in required_vars:
-        if var not in content:
-            missing_vars.append(var)
+    # Set environment variables for testing
+    for key, value in test_env.items():
+        os.environ[key] = value
     
-    if missing_vars:
-        print(f"⚠️ Missing environment variables: {', '.join(missing_vars)}")
-        return False
-    
-    print("✅ .env file contains required Stripe variables")
-    return True
-
-def create_env_template():
-    """Create a template .env file."""
-    template = """# OpenAI Model
-MODEL=openai/gpt-4o-mini
-OPENAI_API_KEY=your_openai_api_key
-
-# Gmail credentials
-EMAIL_ADDRESS=your_email_address@gmail.com
-APP_PASSWORD=your_app_password
-
-# Slack Webhook URL
-SLACK_WEBHOOK_URL=your_slack_webhook_url
-
-# Stripe Configuration
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
-STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
-
-# Stripe Price IDs (create these in your Stripe dashboard)
-STRIPE_BASIC_PRICE_ID=price_basic_monthly
-STRIPE_PREMIUM_PRICE_ID=price_premium_monthly
-"""
-    
-    with open('.env', 'w') as f:
-        f.write(template)
-    
-    print("📝 Created .env template file")
-    print("🔧 Please update it with your actual Stripe keys")
-
-def start_webhook_test_server():
-    """Start the webhook test server."""
-    print("\n🚀 Starting webhook test server...")
-    print("📡 Server will run on: http://localhost:5000/webhook/stripe")
-    print("🛑 Press Ctrl+C to stop the server")
-    print("-" * 50)
+    print(f"📡 Sending webhook to {WEBHOOK_URL}")
+    print(f"📦 Payload: {json.dumps(payload, indent=2)}")
     
     try:
-        subprocess.run([sys.executable, "webhook_test.py"], check=True)
-    except KeyboardInterrupt:
-        print("\n👋 Webhook test server stopped")
-    except FileNotFoundError:
-        print("❌ webhook_test.py not found. Make sure it's in the current directory.")
+        # Send the webhook
+        headers = {
+            "Content-Type": "application/json",
+            "Stripe-Signature": f"t={int(datetime.now().timestamp())},v1=test_signature"
+        }
+        
+        response = requests.post(
+            WEBHOOK_URL, 
+            json=payload, 
+            headers=headers,
+            timeout=10
+        )
+        
+        print(f"✅ Response Status: {response.status_code}")
+        print(f"📄 Response Body: {response.text}")
+        
+        if response.status_code == 200:
+            print("🎉 Webhook test successful!")
+            return True
+        else:
+            print(f"❌ Webhook test failed with status {response.status_code}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error sending webhook: {e}")
+        return False
 
-def show_stripe_commands(stripe_exe):
-    """Show useful Stripe CLI commands."""
-    print(f"\n🎯 Useful Stripe CLI Commands:")
-    print(f"1. Login to Stripe:")
-    print(f"   {stripe_exe} login")
-    print(f"\n2. Start webhook forwarding:")
-    print(f"   {stripe_exe} listen --forward-to localhost:5000/webhook/stripe")
-    print(f"\n3. Trigger test events (in another terminal):")
-    print(f"   {stripe_exe} trigger customer.subscription.created")
-    print(f"   {stripe_exe} trigger invoice.payment_succeeded")
-    print(f"   {stripe_exe} trigger customer.subscription.deleted")
-    print(f"\n4. View your Stripe account:")
-    print(f"   {stripe_exe} open")
-
-def main():
-    """Main setup function."""
-    print("🔧 Stripe Webhook Testing Setup")
-    print("=" * 40)
+def test_subscription_updated():
+    """Test subscription.updated webhook"""
+    print("\n🧪 Testing subscription.updated webhook...")
     
-    # Check Stripe CLI
-    stripe_exe = check_stripe_cli()
-    if not stripe_exe:
-        print("\n❌ Please make sure stripe.exe is in the current directory")
-        return
+    payload = {
+        "id": "evt_test_subscription_updated",
+        "object": "event", 
+        "api_version": "2020-08-27",
+        "created": int(datetime.now().timestamp()),
+        "data": {
+            "object": {
+                "id": "sub_test_subscription",
+                "object": "subscription",
+                "customer": "cus_test_customer", 
+                "status": "active",
+                "current_period_start": int(datetime.now().timestamp()),
+                "current_period_end": int(datetime.now().timestamp()) + 2592000,
+                "items": {
+                    "object": "list",
+                    "data": [
+                        {
+                            "id": "si_test_item",
+                            "object": "subscription_item",
+                            "price": {
+                                "id": "price_premium_monthly",
+                                "object": "price",
+                                "nickname": "Premium Plan"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "type": "customer.subscription.updated"
+    }
     
-    # Check environment file
-    env_ready = check_env_file()
+    print(f"📡 Sending webhook to {WEBHOOK_URL}")
     
-    # Show commands
-    show_stripe_commands(stripe_exe)
-    
-    if not env_ready:
-        print("\n⚠️ Please update your .env file with Stripe keys before proceeding")
-        return
-    
-    print("\n" + "="*50)
-    print("🎯 NEXT STEPS:")
-    print("1. Make sure you've logged into Stripe CLI")
-    print("2. Run the webhook test server: python webhook_test.py")
-    print("3. In another terminal, start forwarding:")
-    print(f"   {stripe_exe} listen --forward-to localhost:5000/webhook/stripe")
-    print("4. Copy the webhook secret from the CLI output to your .env file")
-    print("5. Test with: ./stripe.exe trigger customer.subscription.created")
-    print("="*50)
-    
-    # Ask if they want to start the webhook server
     try:
-        choice = input("\n🚀 Start webhook test server now? (y/n): ").lower().strip()
-        if choice in ['y', 'yes']:
-            start_webhook_test_server()
-    except KeyboardInterrupt:
-        print("\n👋 Setup complete!")
+        headers = {
+            "Content-Type": "application/json",
+            "Stripe-Signature": f"t={int(datetime.now().timestamp())},v1=test_signature"
+        }
+        
+        response = requests.post(
+            WEBHOOK_URL,
+            json=payload,
+            headers=headers, 
+            timeout=10
+        )
+        
+        print(f"✅ Response Status: {response.status_code}")
+        print(f"📄 Response Body: {response.text}")
+        
+        if response.status_code == 200:
+            print("🎉 Webhook test successful!")
+            return True
+        else:
+            print(f"❌ Webhook test failed with status {response.status_code}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error sending webhook: {e}")
+        return False
+
+def test_subscription_deleted():
+    """Test subscription.deleted webhook"""
+    print("\n🧪 Testing subscription.deleted webhook...")
+    
+    payload = {
+        "id": "evt_test_subscription_deleted",
+        "object": "event",
+        "api_version": "2020-08-27", 
+        "created": int(datetime.now().timestamp()),
+        "data": {
+            "object": {
+                "id": "sub_test_subscription",
+                "object": "subscription",
+                "customer": "cus_test_customer",
+                "status": "canceled",
+                "canceled_at": int(datetime.now().timestamp()),
+                "current_period_start": int(datetime.now().timestamp()),
+                "current_period_end": int(datetime.now().timestamp()) + 2592000
+            }
+        },
+        "type": "customer.subscription.deleted"
+    }
+    
+    print(f"📡 Sending webhook to {WEBHOOK_URL}")
+    
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Stripe-Signature": f"t={int(datetime.now().timestamp())},v1=test_signature"
+        }
+        
+        response = requests.post(
+            WEBHOOK_URL,
+            json=payload,
+            headers=headers,
+            timeout=10
+        )
+        
+        print(f"✅ Response Status: {response.status_code}")
+        print(f"📄 Response Body: {response.text}")
+        
+        if response.status_code == 200:
+            print("🎉 Webhook test successful!")
+            return True
+        else:
+            print(f"❌ Webhook test failed with status {response.status_code}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error sending webhook: {e}")
+        return False
 
 if __name__ == "__main__":
-    main()
+    print("🚀 Starting Stripe webhook tests...")
+    print("⚠️  Make sure Streamlit app is running on http://localhost:8501")
+    print("=" * 60)
+    
+    success_count = 0
+    total_tests = 3
+    
+    # Run all tests
+    if test_subscription_created():
+        success_count += 1
+        
+    if test_subscription_updated():
+        success_count += 1
+        
+    if test_subscription_deleted():
+        success_count += 1
+    
+    print("\n" + "=" * 60)
+    print(f"📊 Test Results: {success_count}/{total_tests} tests passed")
+    
+    if success_count == total_tests:
+        print("🎉 All webhook tests passed!")
+    else:
+        print("❌ Some tests failed. Check the output above for details.")

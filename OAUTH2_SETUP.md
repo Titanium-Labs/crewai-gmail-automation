@@ -75,16 +75,12 @@ Create a `.env` file in your project root with the following:
 # Required for AI processing
 OPENAI_API_KEY=your_openai_api_key_here
 
-# Optional: Slack notifications
-SLACK_WEBHOOK_URL=your_slack_webhook_url_here
-
 # The app will automatically handle OAuth2 user management
-# No need to set EMAIL_ADDRESS or APP_PASSWORD for OAuth2 mode
 ```
 
 ## 🏃‍♂️ Step 4: Run the Application
 
-### Option 1: Streamlit Web UI (Recommended)
+### Streamlit Web UI (Recommended)
 
 ```bash
 streamlit run streamlit_app.py
@@ -96,17 +92,15 @@ This will open a web interface where you can:
 - Process emails with AI
 - View processing results
 
-### Option 2: Command Line (Legacy IMAP mode)
+### Command Line
 
-If you prefer the old IMAP method, set these environment variables:
+For OAuth2 authentication:
 
-```env
-EMAIL_ADDRESS=your_gmail@gmail.com
-APP_PASSWORD=your_app_password
-```
-
-Then run:
 ```bash
+# Set the user ID for the session
+export CURRENT_USER_ID=your_user_id
+
+# Run the crew
 python -m src.gmail_crew_ai.main
 ```
 
@@ -196,8 +190,7 @@ Once set up, you can:
 1. **Process Multiple Accounts**: Add and manage multiple Gmail accounts
 2. **AI Email Management**: Let AI categorize, organize, and respond to emails
 3. **Custom Rules**: Modify the AI agents' behavior in the config files
-4. **Slack Integration**: Get notifications for high-priority emails
-5. **Automation**: Set up scheduled processing (future enhancement)
+4. **Automation**: Set up scheduled processing (future enhancement)
 
 ## 🆘 Getting Help
 

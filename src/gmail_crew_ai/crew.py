@@ -1,16 +1,19 @@
+#!/usr/bin/env python
+import os
+import json
+from datetime import datetime, date
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task, before_kickoff
-from gmail_crew_ai.tools.file_tools import FileReadTool, JsonFileReadTool, JsonFileSaveTool
-import json
-import os
-from typing import List, Dict, Any, Callable
-from pydantic import SkipValidation
-from datetime import date, datetime
 
-from gmail_crew_ai.tools.gmail_tools import GetUnreadEmailsTool, SaveDraftTool, GmailOrganizeTool, GmailDeleteTool, EmptyTrashTool
-from gmail_crew_ai.tools.slack_tool import SlackNotificationTool
-from gmail_crew_ai.tools.date_tools import DateCalculationTool
-from gmail_crew_ai.models import CategorizedEmail, OrganizedEmail, EmailResponse, SlackNotification, EmailCleanupInfo, SimpleCategorizedEmail, EmailDetails, CategorizedEmailsList, OrganizedEmailsList, EmailResponsesList, SlackNotificationsList, EmailCleanupReport
+from gmail_crew_ai.tools import (
+	GetUnreadEmailsTool, 
+	GmailOrganizeTool, 
+	GmailDeleteTool, 
+	SaveDraftTool, 
+	EmptyTrashTool
+)
+from gmail_crew_ai.tools.file_tools import FileReadTool
+from gmail_crew_ai.models import EmailDetails, CategorizedEmailsList, OrganizedEmailsList, EmailResponsesList, EmailCleanupReport
 
 @CrewBase
 class GmailCrewAi():
@@ -98,15 +101,6 @@ class GmailCrewAi():
 			tools=[SaveDraftTool()],
 			llm=self.llm,
 		)
-	
-	@agent
-	def notifier(self) -> Agent:
-		"""The email notification agent."""
-		return Agent(
-			config=self.agents_config['notifier'],
-			tools=[SlackNotificationTool()],
-			llm=self.llm,
-		)
 
 	@agent
 	def cleaner(self) -> Agent:
@@ -139,14 +133,6 @@ class GmailCrewAi():
 		return Task(
 			config=self.tasks_config['response_task'],
 			output_pydantic=EmailResponsesList,
-		)
-	
-	@task
-	def notification_task(self) -> Task:
-		"""The email notification task."""
-		return Task(
-			config=self.tasks_config['notification_task'],
-			output_pydantic=SlackNotificationsList,
 		)
 
 	@task
@@ -194,82 +180,5 @@ class GmailCrewAi():
 			print(f"DEBUG: Agent starting: {payload.get('agent_name')}")
 		elif event_type == "agent_end":
 			print(f"DEBUG: Agent finished: {payload.get('agent_name')}")
-		elif event_type == "error":
-			print(f"DEBUG: Error: {payload.get('error')}")
-
-	def _validate_categorization_output(self, output):
-		"""Validate the categorization output before writing to file."""
-		print(f"DEBUG: Validating categorization output: {output}")
-		
-		# If output is empty or invalid, provide a default
-		if not output:
-			print("WARNING: Empty categorization output, providing default")
-			return {
-				"email_id": "",
-				"subject": "",
-				"category": "",
-				"priority": "",
-				"required_action": ""
-			}
-		
-		# If output is a string (which might happen if the LLM returns JSON as a string)
-		if isinstance(output, str):
-			try:
-				# Try to parse it as JSON
-				import json
-				# First, check if the string starts with "my best complete final answer"
-				if "my best complete final answer" in output.lower():
-					# Extract the JSON part
-					json_start = output.find("{")
-					json_end = output.rfind("}") + 1
-					if json_start >= 0 and json_end > json_start:
-						json_str = output[json_start:json_end]
-						parsed = json.loads(json_str)
-						print("DEBUG: Successfully extracted and parsed JSON from answer")
-						return parsed
-				
-				# Try to parse the whole string as JSON
-				parsed = json.loads(output)
-				print("DEBUG: Successfully parsed string output as JSON")
-				return parsed
-			except Exception as e:
-				print(f"WARNING: Output is a string but not valid JSON: {e}")
-				# Try to extract anything that looks like JSON
-				import re
-				json_pattern = r'\{.*\}'
-				match = re.search(json_pattern, output, re.DOTALL)
-				if match:
-					try:
-						json_str = match.group(0)
-						parsed = json.loads(json_str)
-						print("DEBUG: Successfully extracted and parsed JSON using regex")
-						return parsed
-					except:
-						print("WARNING: Failed to parse extracted JSON")
-		
-		# If output is already a dict, make sure it has the required fields
-		if isinstance(output, dict):
-			required_fields = ["email_id", "subject", "category", "priority", "required_action"]
-			missing_fields = [field for field in required_fields if field not in output]
-			
-			if missing_fields:
-				print(f"WARNING: Output missing required fields: {missing_fields}")
-				# Add missing fields with empty values
-				for field in missing_fields:
-					output[field] = ""
-			
-			# Check if the values match the expected format
-			if output.get("email_id") == "12345" and output.get("subject") == "Urgent Task Update":
-				print("WARNING: Output contains placeholder values, trying to fix")
-				# Try to get the real email ID from the fetched emails
-				try:
-					with open("output/fetched_emails.json", "r", encoding='utf-8') as f:
-						fetched_emails = json.load(f)
-						if fetched_emails and len(fetched_emails) > 0:
-							real_email = fetched_emails[0]
-							output["email_id"] = real_email.get("email_id", "")
-							output["subject"] = real_email.get("subject", "")
-				except Exception as e:
-					print(f"WARNING: Failed to fix placeholder values: {e}")
-		
-		return output
+		else:
+			print(f"DEBUG: Event {event_type}: {payload}")

@@ -5,7 +5,7 @@
 [![Twitter Follow](https://img.shields.io/twitter/follow/tonykipkemboi?style=social)](https://twitter.com/tonykipkemboi)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](https://www.linkedin.com/in/tonykipkemboi/)
 
-Gmail Automation with CrewAI is an intelligent email management system that uses AI agents to categorize, organize, respond to, and clean up your Gmail inbox automatically.
+Gmail Automation with CrewAI is an intelligent email management system that uses AI agents to categorize, organize, respond to, and clean up your Gmail inbox automatically using OAuth2 authentication.
 
 ![Gmail Automation](./assets/gmail-automation.jpg)
 
@@ -19,14 +19,13 @@ Gmail Automation with CrewAI is an intelligent email management system that uses
 - **🔔 Priority Assignment**: Assigns priority levels (HIGH, MEDIUM, LOW) based on content and sender with strict classification rules
 - **🏷️ Smart Organization**: Applies Gmail labels and stars based on categories and priorities
 - **💬 Automated Responses**: Generates draft responses for important emails that need replies
-- **📱 Slack Notifications**: Sends creative notifications for high-priority emails
 - **🧹 Intelligent Cleanup**: Safely deletes low-priority emails based on age and category
 - **🎬 YouTube Content Protection**: Special handling for YouTube-related emails
 - **🗑️ Trash Management**: Automatically empties trash to free up storage space
 - **🧵 Thread Awareness**: Recognizes and properly handles email threads
 - **💳 Subscription Management**: Stripe-powered subscription system with usage-based limits
 - **📊 Usage Tracking**: Daily email processing limits based on subscription tier
-
+- **🔐 OAuth2 Authentication**: Secure multi-user Gmail access without app passwords
 
 ## 🚀 Installation
 
@@ -47,7 +46,7 @@ crewai install
 
 1. Create a `.env` file in the root directory with the following variables:
 
-```
+```env
 # Choose your LLM provider
 # OpenAI (Recommended)
 MODEL=openai/gpt-4o-mini
@@ -61,13 +60,6 @@ OPENAI_API_KEY=your_openai_api_key
 # Download the model from https://ollama.com/library
 # MODEL=ollama/llama3-groq-tool-use # use ones that have tool calling capabilities
 
-# Gmail credentials
-EMAIL_ADDRESS=your_email@gmail.com
-APP_PASSWORD=your_app_password
-
-# Optional: Slack notifications
-SLACK_WEBHOOK_URL=your_slack_webhook_url
-
 # Stripe Configuration (for subscription management)
 STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
 STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
@@ -76,92 +68,44 @@ STRIPE_BASIC_PRICE_ID=price_basic_monthly
 STRIPE_PREMIUM_PRICE_ID=price_premium_monthly
 ```
 
-<details>
-<summary><b>🔑 How to create a Gmail App Password</b></summary>
+## 🔐 OAuth2 Setup
 
-1. Go to your Google Account settings at [myaccount.google.com](https://myaccount.google.com/)
-2. Select **Security** from the left navigation panel
-3. Under "Signing in to Google," find and select **2-Step Verification** (enable it if not already enabled)
-4. Scroll to the bottom and find **App passwords**
-5. Select **Mail** from the "Select app" dropdown
-6. Select **Other (Custom name)** from the "Select device" dropdown
-7. Enter `Gmail CrewAI` as the name
-8. Click **Generate**
-9. Copy the 16-character password that appears (spaces will be removed automatically)
-10. Paste this password in your `.env` file as the `APP_PASSWORD` value
-11. Click **Done**
-
-**Note**: App passwords can only be created if you have 2-Step Verification enabled on your Google account.
-</details>
-
-<details>
-<summary><b>🔗 How to create a Slack Webhook URL</b></summary>
-
-1. Go to [api.slack.com/apps](https://api.slack.com/apps)
-2. Click **Create New App**
-3. Select **From scratch**
-4. Enter `Gmail Notifications` as the app name
-5. Select your workspace and click **Create App**
-6. In the left sidebar, find and click on **Incoming Webhooks**
-7. Toggle the switch to **Activate Incoming Webhooks**
-8. Click **Add New Webhook to Workspace**
-9. Select the channel where you want to receive notifications
-10. Click **Allow**
-11. Find the **Webhook URL** section and copy the URL that begins with `https://hooks.slack.com/services/`
-12. Paste this URL in your `.env` file as the `SLACK_WEBHOOK_URL` value
-
-**Customizing your Slack app (optional):**
-1. Go to **Basic Information** in the left sidebar
-2. Scroll down to **Display Information**
-3. Add an app icon and description
-4. Click **Save Changes**
-
-**Note**: You need admin permissions or the ability to install apps in your Slack workspace.
-</details>
-
-## 📧 How It Works
-
-This application uses the IMAP (Internet Message Access Protocol) to securely connect to your Gmail account and manage your emails. Here's how it works:
-
-<details>
-<summary><b>🔄 IMAP Connection Process</b></summary>
-
-1. **Secure Connection**: The application establishes a secure SSL connection to Gmail's IMAP server (`imap.gmail.com`).
-
-2. **Authentication**: It authenticates using your email address and app password (not your regular Google password).
-
-3. **Mailbox Access**: Once authenticated, it can access your inbox and other mailboxes to:
-   - Read unread emails
-   - Apply labels
-   - Move emails to trash
-   - Save draft responses
-
-4. **Safe Disconnection**: After each operation, the connection is properly closed to maintain security.
-
-IMAP allows the application to work with your emails while they remain on Google's servers, unlike POP3 which would download them to your device. This means you can still access all emails through the regular Gmail interface.
-
-**Security Note**: Your credentials are only stored locally in your `.env` file and are never shared with any external services.
-</details>
+This application uses OAuth2 for secure Gmail authentication. Follow the [OAuth2 Setup Guide](OAUTH2_SETUP.md) to configure Google Cloud credentials and enable multi-user support.
 
 ## 🔍 Usage
 
-Run the application with:
+### Streamlit Web Interface (Recommended)
 
 ```bash
+streamlit run streamlit_app.py
+```
+
+This will open a web interface where you can:
+- Authenticate multiple Gmail accounts via OAuth2
+- Manage user sessions  
+- Process emails with AI
+- View processing results
+
+### Command Line
+
+For OAuth2 mode:
+```bash
+# Set the current user ID
+export CURRENT_USER_ID=your_user_id
+
+# Run the crew
 crewai run
 ```
 
 You'll be prompted to enter the number of emails to process (default is 5).
 
 The application will:
-1. 📥 Fetch your unread emails
+1. 📥 Fetch your unread emails via OAuth2
 2. 🔎 Categorize them by type and priority
 3. ⭐ Apply appropriate labels and stars
 4. ✏️ Generate draft responses for important emails
-5. 🔔 Send Slack notifications for high-priority items
-6. 🗑️ Clean up low-priority emails based on age
-7. 🧹 Empty the trash to free up storage space
-
+5. 🗑️ Clean up low-priority emails based on age
+6. 🧹 Empty the trash to free up storage space
 
 ## 🌟 Special Features
 
@@ -175,8 +119,6 @@ The application will:
 
 - **✍️ Smart Response Generation**: Responses are tailored to the email context and include proper formatting
 
-- **💡 Creative Slack Notifications**: Fun, attention-grabbing notifications for important emails
-
 - **🧵 Thread Handling**: Properly tracks and manages email threads to maintain conversation context
 
 ## 👥 Contributing
@@ -185,42 +127,53 @@ Contributions are welcome! Please feel free to submit a [Pull Request](https://g
 
 ## 💳 Subscription Plans
 
-The application includes a built-in subscription management system with three tiers:
+The application includes built-in subscription management with usage limits:
 
-### Free Plan
-- **Price**: $0/month
-- **Daily Limit**: 10 emails
-- **Features**: Basic email categorization, Gmail integration
+- **Free Tier**: 10 emails per day
+- **Basic Plan**: 100 emails per day  
+- **Premium Plan**: Unlimited emails
 
-### Basic Plan
-- **Price**: $9.99/month
-- **Daily Limit**: 100 emails
-- **Features**: All Free features + automated responses, Slack notifications, email cleanup
+## 📁 File Structure
 
-### Premium Plan
-- **Price**: $29.99/month
-- **Daily Limit**: 1000 emails
-- **Features**: All Basic features + priority support, custom email rules, analytics dashboard
+After setup, your project should look like:
 
-### Setting Up Subscriptions
+```
+gmail-crewai/
+├── credentials.json          # OAuth2 credentials (keep secret!)
+├── tokens/                   # User tokens directory (auto-created)
+│   ├── user1_abc123_token.pickle
+│   └── user2_def456_token.pickle
+├── output/                   # Processing results (auto-created)
+├── streamlit_app.py         # Main web interface
+├── requirements.txt         # Dependencies
+├── .env                     # Environment variables
+├── .gitignore              # Include credentials.json here!
+└── src/gmail_crew_ai/      # Main application code
+```
 
-To enable subscription management:
+## 🔒 Security Features
 
-1. Create a Stripe account at [stripe.com](https://stripe.com)
-2. Follow the detailed setup guide in [STRIPE_SETUP.md](STRIPE_SETUP.md)
-3. Configure your environment variables with Stripe keys
-4. Set up webhook endpoints for real-time subscription updates
+- **OAuth2 Authentication**: No app passwords required
+- **Token Storage**: OAuth2 tokens are stored locally in encrypted format
+- **Automatic Refresh**: Tokens are automatically refreshed when needed
+- **Revocation**: Users can revoke access at any time
+- **Local Processing**: All AI processing happens locally with your OpenAI key
+- **No Data Storage**: Email content is not permanently stored
 
-## 📄 License
+## 🛠️ Troubleshooting
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+See the [OAuth2 Setup Guide](OAUTH2_SETUP.md) for detailed troubleshooting steps.
 
-## 📚 References
+## 🆘 Getting Help
 
-- [CrewAI](https://github.com/crewAIInc/crewAI/)
-- [IMAP Protocol for Gmail](https://support.google.com/mail/answer/7126229)
-- [Slack API](https://api.slack.com/messaging/webhooks)
-- [Ollama](https://ollama.com/library)
-- [Gemini](https://ai.google.com/gemini-api)
-- [OpenAI](https://openai.com/api/)
+If you encounter issues:
+
+1. Check the OAuth2 setup guide
+2. Verify your Google Cloud Console setup
+3. Review the application logs in the Streamlit interface
+4. Check that all environment variables are set correctly
+
+---
+
+**🎉 Ready to automate your Gmail with AI!** Your intelligent email assistant is ready to help you manage emails efficiently and securely.
 

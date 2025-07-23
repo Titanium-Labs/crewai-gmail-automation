@@ -1,44 +1,40 @@
-"""OAuth2-enabled version of Gmail CrewAI that supports both OAuth2 and IMAP authentication."""
-
+#!/usr/bin/env python
+import sys
 import os
 import json
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Dict, Any, Optional
 
-from crewai import Agent, Crew, Process, Task, LLM
-from crewai.project import CrewBase, agent, crew, task, before_kickoff
+from dotenv import load_dotenv
+from crewai import Agent, Crew, Process, Task
+from crewai.project import CrewBase, agent, before_kickoff, crew, task
+from crewai_tools import FileReadTool
 
-# Import both OAuth2 and IMAP tools
+# OAuth2 Gmail Tools
 try:
     from .tools.gmail_oauth_tools import (
-        OAuth2GetUnreadEmailsTool, 
+        OAuth2GetUnreadEmailsTool,
         OAuth2GmailOrganizeTool, 
-        OAuth2GmailDeleteTool, 
-        OAuth2SaveDraftTool, 
-        OAuth2EmptyTrashTool,
-        OAuth2GetSentEmailsTool,
-        OAuth2UserPersonaAnalyzerTool
+        OAuth2GmailDeleteTool,
+        OAuth2SaveDraftTool,
+        OAuth2EmptyTrashTool
     )
-    from .auth import OAuth2Manager
+    from .auth.oauth2_manager import OAuth2Manager
+    OAUTH2_AVAILABLE = True
 except ImportError:
-    # Fallback if OAuth2 dependencies not available
-    OAuth2GetUnreadEmailsTool = None
-    OAuth2GmailOrganizeTool = None
-    OAuth2GmailDeleteTool = None
-    OAuth2SaveDraftTool = None
-    OAuth2EmptyTrashTool = None
-    OAuth2GetSentEmailsTool = None
-    OAuth2UserPersonaAnalyzerTool = None
-    OAuth2Manager = None
+    print("⚠️ OAuth2 tools not available. Please check your setup.")
+    # Set dummy classes to None to avoid unbound variable errors
+    OAuth2GetUnreadEmailsTool = None  # type: ignore
+    OAuth2GmailOrganizeTool = None  # type: ignore
+    OAuth2GmailDeleteTool = None  # type: ignore
+    OAuth2SaveDraftTool = None  # type: ignore
+    OAuth2EmptyTrashTool = None  # type: ignore
+    OAuth2Manager = None  # type: ignore
+    OAUTH2_AVAILABLE = False
 
-from .tools import (
-    GetUnreadEmailsTool, 
-    GmailOrganizeTool, 
-    GmailDeleteTool, 
-    SaveDraftTool, 
-    EmptyTrashTool,
-    SlackNotificationTool,
+from crewai import LLM
+from .tools.date_tools import (
     DateCalculationTool
 )
 from .tools.file_tools import FileReadTool, JsonFileReadTool, JsonFileSaveTool
@@ -53,87 +49,54 @@ class OAuth2GmailCrewAi:
     tasks_config = 'config/tasks.yaml'
 
     def __init__(self):
-        """Initialize crew with appropriate authentication method."""
-        self.use_oauth2 = bool(os.environ.get("CURRENT_USER_ID"))
-        self.user_id = os.environ.get("CURRENT_USER_ID") if self.use_oauth2 else None
+        """Initialize crew with OAuth2 authentication."""
+        self.user_id = os.environ.get("CURRENT_USER_ID")
         
-        if self.use_oauth2:
-            print(f"🔐 Using OAuth2 authentication for user: {self.user_id}")
-            self.oauth_manager = OAuth2Manager() if OAuth2Manager else None
-        else:
-            print("📧 Using IMAP authentication (EMAIL_ADDRESS/APP_PASSWORD)")
-            self.oauth_manager = None
+        if not self.user_id:
+            raise ValueError("CURRENT_USER_ID environment variable must be set for OAuth2 authentication")
+            
+        print(f"🔐 Using OAuth2 authentication for user: {self.user_id}")
+        
+        if not OAUTH2_AVAILABLE:
+            raise ImportError("OAuth2Manager not available. Please check your OAuth2 setup.")
+            
+        self.oauth_manager = OAuth2Manager()
 
     def _get_gmail_tools(self):
-        """Get appropriate Gmail tools based on authentication method."""
-        if self.use_oauth2 and OAuth2GetUnreadEmailsTool:
-            return [
-                OAuth2GetUnreadEmailsTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
-                OAuth2GmailOrganizeTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
-                OAuth2GmailDeleteTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
-                OAuth2SaveDraftTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
-                OAuth2EmptyTrashTool(user_id=self.user_id, oauth_manager=self.oauth_manager)
-            ]
-        else:
-            # Fallback to IMAP tools
-            return [
-                GetUnreadEmailsTool(),
-                GmailOrganizeTool(),
-                GmailDeleteTool(),
-                SaveDraftTool(),
-                EmptyTrashTool()
-            ]
-
-    def check_and_create_user_persona(self):
-        """Check if user_facts.txt is blank and create user persona if needed."""
-        facts_file = "knowledge/user_facts.txt"
-        
-        # Check if file exists and is empty or very small
-        try:
-            if not os.path.exists(facts_file) or os.path.getsize(facts_file) < 50:
-                print("📋 User facts file is empty or missing. Creating user persona from sent emails...")
-                
-                if self.use_oauth2 and OAuth2GetSentEmailsTool and OAuth2UserPersonaAnalyzerTool:
-                    # Fetch sent emails
-                    sent_email_tool = OAuth2GetSentEmailsTool(user_id=self.user_id, oauth_manager=self.oauth_manager)
-                    sent_emails = sent_email_tool._run(max_emails=100)
-                    
-                    if sent_emails:
-                        # Analyze emails and create persona
-                        analyzer_tool = OAuth2UserPersonaAnalyzerTool(user_id=self.user_id, oauth_manager=self.oauth_manager)
-                        result = analyzer_tool._run(sent_emails=sent_emails)
-                        print(f"✅ {result}")
-                        return True
-                    else:
-                        print("⚠️ No sent emails found for persona analysis")
-                        return False
-                else:
-                    print("⚠️ OAuth2 tools not available for persona analysis")
-                    return False
-            else:
-                print("✅ User facts file already exists and has content")
-                return True
-        except Exception as e:
-            print(f"❌ Error checking/creating user persona: {e}")
-            return False
+        """Get OAuth2 Gmail tools."""
+        if not OAUTH2_AVAILABLE:
+            raise ImportError("OAuth2 Gmail tools not available. Please check your setup.")
+            
+        return [
+            OAuth2GetUnreadEmailsTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
+            OAuth2GmailOrganizeTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
+            OAuth2GmailDeleteTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
+            OAuth2SaveDraftTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
+            OAuth2EmptyTrashTool(user_id=self.user_id, oauth_manager=self.oauth_manager)
+        ]
 
     @before_kickoff
-    def fetch_emails(self, inputs):
-        """Fetch emails using appropriate authentication method."""
-        print(f"🔍 Fetching emails using {'OAuth2' if self.use_oauth2 else 'IMAP'} authentication...")
+    def prepare_emails(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Fetch emails using OAuth2 authentication."""
+        print("📧 Fetching emails using OAuth2...")
         
-        # Check and create user persona if needed
-        self.check_and_create_user_persona()
+        # Ensure output directory exists
+        output_dir = Path("output")
+        output_dir.mkdir(exist_ok=True)
+        
+        # Get email limit from inputs (default to 10 for OAuth2)
+        email_limit = inputs.get('email_limit', 10)
+        print(f"Processing up to {email_limit} emails...")
 
         try:
-            # Get appropriate tool
-            if self.use_oauth2 and OAuth2GetUnreadEmailsTool:
-                tool = OAuth2GetUnreadEmailsTool(user_id=self.user_id, oauth_manager=self.oauth_manager)
-            else:
-                tool = GetUnreadEmailsTool()
+            # Get OAuth2 email tool
+            if not OAUTH2_AVAILABLE:
+                raise ImportError("OAuth2GetUnreadEmailsTool not available")
+                
+            tool = OAuth2GetUnreadEmailsTool(user_id=self.user_id, oauth_manager=self.oauth_manager)
 
             # Fetch emails
-            raw_emails = tool._run(max_emails=50)
+            raw_emails = tool._run(max_emails=email_limit)
             
             if not raw_emails:
                 print("📭 No unread emails found.")
@@ -152,7 +115,11 @@ class OAuth2GmailCrewAi:
                     sender=sender,
                     body=f"EMAIL DATE: {thread_info.get('date', '')}\n\n{limited_body}",
                     date=thread_info.get('date', ''),
-                    thread_info=thread_info
+                    thread_info=thread_info,
+                    age_days=None,
+                    is_part_of_thread=thread_info.get('is_part_of_thread', False),
+                    thread_size=thread_info.get('thread_size', 1),
+                    thread_position=thread_info.get('thread_position', 1)
                 )
 
                 # Calculate age
@@ -166,9 +133,6 @@ class OAuth2GmailCrewAi:
                     email_detail.age_days = None
 
                 emails.append(email_detail.dict())
-
-            # Ensure output directory exists
-            os.makedirs('output', exist_ok=True)
 
             # Save emails to file with UTF-8 encoding
             with open('output/fetched_emails.json', 'w', encoding='utf-8') as f:
@@ -190,7 +154,7 @@ class OAuth2GmailCrewAi:
     def categorizer(self) -> Agent:
         """The email categorizer agent."""
         return Agent(
-            config=self.agents_config['categorizer'],
+            **self.agents_config['categorizer'],
             tools=[FileReadTool()],
             verbose=True,
             llm=self.llm
@@ -201,7 +165,7 @@ class OAuth2GmailCrewAi:
         """The email organizer agent."""
         gmail_tools = self._get_gmail_tools()
         return Agent(
-            config=self.agents_config['organizer'],
+            **self.agents_config['organizer'],
             tools=[*gmail_tools, FileReadTool()],
             verbose=True,
             llm=self.llm
@@ -212,18 +176,8 @@ class OAuth2GmailCrewAi:
         """The email response generator agent."""
         gmail_tools = self._get_gmail_tools()
         return Agent(
-            config=self.agents_config['response_generator'],
+            **self.agents_config['response_generator'],
             tools=[*gmail_tools, FileReadTool()],
-            verbose=True,
-            llm=self.llm
-        )
-
-    @agent
-    def notifier(self) -> Agent:
-        """The email notifier agent."""
-        return Agent(
-            config=self.agents_config['notifier'],
-            tools=[SlackNotificationTool(), FileReadTool()],
             verbose=True,
             llm=self.llm
         )
@@ -233,7 +187,7 @@ class OAuth2GmailCrewAi:
         """The email cleanup specialist agent."""
         gmail_tools = self._get_gmail_tools()
         return Agent(
-            config=self.agents_config['cleaner'],
+            **self.agents_config['cleaner'],
             tools=[*gmail_tools, DateCalculationTool(), FileReadTool()],
             verbose=True,
             llm=self.llm
@@ -264,14 +218,6 @@ class OAuth2GmailCrewAi:
         )
 
     @task
-    def notification_task(self) -> Task:
-        """The email notification task."""
-        return Task(
-            config=self.tasks_config['notification_task'],
-            output_file="output/notification_report.json"
-        )
-
-    @task
     def cleanup_task(self) -> Task:
         """The email cleanup task."""
         return Task(
@@ -281,53 +227,33 @@ class OAuth2GmailCrewAi:
 
     @crew
     def crew(self) -> Crew:
-        """Creates the Gmail CrewAI crew."""
-        auth_method = "OAuth2" if self.use_oauth2 else "IMAP"
-        user_info = f" (User: {self.user_id})" if self.use_oauth2 else ""
-        
-        print(f"🤖 Initializing Gmail CrewAI with {auth_method} authentication{user_info}")
-        
+        """Creates the OAuth2 email processing crew without Slack notifications."""
         return Crew(
-            agents=self.agents,
-            tasks=self.tasks,
+            agents=[
+                self.categorizer(), 
+                self.organizer(), 
+                self.response_generator(),
+                self.cleaner()
+            ],
+            tasks=[
+                self.categorization_task(), 
+                self.organization_task(), 
+                self.response_task(),
+                self.cleanup_task()
+            ],
             process=Process.sequential,
-            verbose=True,
+            verbose=True
         )
 
     def get_user_email(self) -> str:
-        """Get the current user's email address."""
-        if self.use_oauth2 and self.oauth_manager:
-            return self.oauth_manager.get_user_email(self.user_id)
-        else:
-            return os.environ.get("EMAIL_ADDRESS", "unknown@example.com")
-
-    def is_authenticated(self) -> bool:
-        """Check if current user is authenticated."""
-        if self.use_oauth2 and self.oauth_manager:
-            return self.oauth_manager.is_authenticated(self.user_id)
-        else:
-            return bool(os.environ.get("EMAIL_ADDRESS") and os.environ.get("APP_PASSWORD"))
-
-
-def create_crew_for_user(user_id: str, oauth_manager: Any = None) -> OAuth2GmailCrewAi:
-    """Factory function to create a crew for a specific user."""
-    # Set environment variables for this user
-    original_user_id = os.environ.get("CURRENT_USER_ID")
-    
-    try:
-        os.environ["CURRENT_USER_ID"] = user_id
-        
-        crew = OAuth2GmailCrewAi()
-        
-        # If OAuth2 manager provided, use it
-        if oauth_manager:
-            crew.oauth_manager = oauth_manager
-        
-        return crew
-        
-    finally:
-        # Restore original environment
-        if original_user_id:
-            os.environ["CURRENT_USER_ID"] = original_user_id
-        elif "CURRENT_USER_ID" in os.environ:
-            del os.environ["CURRENT_USER_ID"] 
+        """Get the user's email address from OAuth2 credentials."""
+        try:
+            creds = self.oauth_manager.get_credentials(self.user_id)
+            if creds and hasattr(creds, 'id_token'):
+                # Extract email from ID token if available
+                import jwt
+                decoded = jwt.decode(creds.id_token, options={"verify_signature": False})
+                return decoded.get('email', f"user_{self.user_id}@oauth.local")
+        except:
+            pass
+        return f"user_{self.user_id}@oauth.local" 
