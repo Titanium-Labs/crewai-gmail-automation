@@ -1414,16 +1414,21 @@ def show_login_page():
             
             with tab2:
                 st.markdown("**New Users**")
-                email_register = st.text_input("Email address", placeholder="your-email@example.com", key="register_email")
+                st.markdown("Authenticate with your Gmail account to request access:")
                 
                 st.markdown("**Why do you need access?**")
-                reason = st.text_area("Brief explanation", placeholder="I need to automate my work email management...")
+                reason = st.text_area("Brief explanation", placeholder="I need to automate my work email management...", key="register_reason")
                 
-                if st.button(" Request Access", type="primary", use_container_width=True):
-                    if email_register and reason:
-                        handle_registration_request(email_register, reason)
+                # Gmail registration button with icon
+                if st.button("🔗 Sign up with Gmail", type="primary", use_container_width=True):
+                    if reason.strip():
+                        handle_direct_gmail_registration(reason)
                     else:
-                        st.error("Please fill in all fields")
+                        st.error("Please provide a brief explanation")
+                
+                # Help section
+                st.markdown("---")
+                st.info("💡 After Gmail authentication, your request will be sent to the primary owner for approval.")
     
     # Footer
     st.markdown("""
@@ -1482,6 +1487,34 @@ def handle_direct_primary_setup(reason):
         )
         st.success("🔗 Opening Google authentication in a new tab...")
         st.info("👑 After authentication, you'll be set up as the primary owner.")
+        
+    except Exception as e:
+        st.error(f"❌ Error starting Google authentication: {e}")
+
+
+def handle_direct_gmail_registration(reason):
+    """Handle Gmail registration with OAuth2 authentication."""
+    try:
+        # Generate unique OAuth user ID for registration
+        oauth_user_id = f"register_{uuid.uuid4().hex[:8]}"
+        auth_url = st.session_state.oauth_manager.get_authorization_url(oauth_user_id)
+        
+        # Store the reason for the callback handler
+        st.session_state.pending_register_reason = reason
+        st.session_state.pending_oauth_user_id = oauth_user_id
+        st.session_state.authentication_step = 'google_oauth'
+        
+        # Automatically redirect to Google OAuth
+        components.html(
+            f"""
+            <script>
+                window.open('{auth_url}', '_blank');
+            </script>
+            """,
+            height=0,
+        )
+        st.success("🔗 Opening Google authentication in a new tab...")
+        st.info("📝 After authentication, your registration request will be sent for approval.")
         
     except Exception as e:
         st.error(f"❌ Error starting Google authentication: {e}")
@@ -4271,6 +4304,55 @@ def main():
                             st.session_state.oauth_result = "failed"
                             st.session_state.oauth_error = f"Error setting up primary owner: {e}"
                             st.session_state.authentication_step = 'login'
+                    elif oauth_user_id.startswith("register_"):
+                        # User registration - get email and create registration request
+                        try:
+                            authenticated_email = st.session_state.oauth_manager.get_user_email(oauth_user_id)
+                            reason = st.session_state.get('pending_register_reason', 'Account access request')
+                            
+                            # Check if user already exists
+                            existing_user_id, existing_user_data = user_manager.get_user_by_email(authenticated_email)
+                            if existing_user_data:
+                                if existing_user_data.get('status') == 'approved':
+                                    st.session_state.oauth_result = "failed"
+                                    st.session_state.oauth_error = f"Account ({authenticated_email}) already exists and is approved. Please use the Login tab instead."
+                                    st.session_state.authentication_step = 'login'
+                                elif existing_user_data.get('status') == 'pending':
+                                    st.session_state.oauth_result = "failed"
+                                    st.session_state.oauth_error = f"Account ({authenticated_email}) already has a pending registration request."
+                                    st.session_state.authentication_step = 'login'
+                                else:
+                                    st.session_state.oauth_result = "failed"
+                                    st.session_state.oauth_error = f"Account ({authenticated_email}) was previously rejected. Contact the primary owner."
+                                    st.session_state.authentication_step = 'login'
+                            else:
+                                # Create new user registration request
+                                new_user_id = user_manager.create_user(
+                                    email=authenticated_email,
+                                    reason=reason,
+                                    is_primary=False
+                                )
+                                
+                                # Send approval email to primary owner
+                                primary_user = user_manager.get_primary_user()
+                                if primary_user:
+                                    # Here you could send an email notification
+                                    pass
+                                
+                                st.session_state.oauth_result = "success"
+                                st.session_state.oauth_success_message = f"Registration successful! Your request has been sent to the primary owner ({primary_user['email'] if primary_user else 'administrator'}) for approval."
+                                st.session_state.authentication_step = 'login'
+                                
+                                # Clean up pending state
+                                if 'pending_oauth_user_id' in st.session_state:
+                                    del st.session_state.pending_oauth_user_id
+                                if 'pending_register_reason' in st.session_state:
+                                    del st.session_state.pending_register_reason
+                                    
+                        except Exception as e:
+                            st.session_state.oauth_result = "failed"
+                            st.session_state.oauth_error = f"Error during registration: {e}"
+                            st.session_state.authentication_step = 'login'
                     elif oauth_user_id.startswith("login_"):
                         # Direct login - get email from OAuth manager and check if user exists
                         try:
@@ -4375,26 +4457,31 @@ def main():
             if 'oauth_error' in st.session_state:
                 del st.session_state.oauth_error
         elif st.session_state.oauth_result == "success":
-            # Create a success message that disappears after 3 seconds
-            success_placeholder = st.empty()
-            success_placeholder.success(" Authentication successful! Redirecting...")
-            
-            # Use JavaScript to hide the message after 3 seconds
-            components.html(
-                """
-                <script>
-                setTimeout(function() {
-                    var elements = parent.document.querySelectorAll('[data-testid="stAlert"]');
-                    elements.forEach(function(element) {
-                        if (element.textContent.includes(' Authentication successful!')) {
-                            element.style.display = 'none';
-                        }
-                    });
-                }, 3000);
-                </script>
-                """,
-                height=0,
-            )
+            # Check if there's a custom success message (for registration)
+            if 'oauth_success_message' in st.session_state:
+                st.success(st.session_state.oauth_success_message)
+                del st.session_state.oauth_success_message
+            else:
+                # Create a success message that disappears after 3 seconds
+                success_placeholder = st.empty()
+                success_placeholder.success(" Authentication successful! Redirecting...")
+                
+                # Use JavaScript to hide the message after 3 seconds
+                components.html(
+                    """
+                    <script>
+                    setTimeout(function() {
+                        var elements = parent.document.querySelectorAll('[data-testid="stAlert"]');
+                        elements.forEach(function(element) {
+                            if (element.textContent.includes(' Authentication successful!')) {
+                                element.style.display = 'none';
+                            }
+                        });
+                    }, 3000);
+                    </script>
+                    """,
+                    height=0,
+                )
             
             # Clear the result after showing
             del st.session_state.oauth_result
