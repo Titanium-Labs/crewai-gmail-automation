@@ -4238,7 +4238,7 @@ def main():
                     if oauth_user_id.startswith("primary_setup_"):
                         # Primary owner setup - get email and create as primary user
                         try:
-                            authenticated_email = st.session_state.oauth_manager.get_user_email()
+                            authenticated_email = st.session_state.oauth_manager.get_user_email(oauth_user_id)
                             reason = st.session_state.get('pending_primary_reason', 'Primary owner setup')
                             
                             # Create the primary user
@@ -4274,7 +4274,7 @@ def main():
                     elif oauth_user_id.startswith("login_"):
                         # Direct login - get email from OAuth manager and check if user exists
                         try:
-                            authenticated_email = st.session_state.oauth_manager.get_user_email()
+                            authenticated_email = st.session_state.oauth_manager.get_user_email(oauth_user_id)
                             user_id, user_data = user_manager.get_user_by_email(authenticated_email)
                             
                             if user_data:
