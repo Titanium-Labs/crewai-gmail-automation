@@ -6,7 +6,8 @@ authors = [{ name = "Your Name", email = "you@example.com" }]
 requires-python = ">=3.10,<3.13"
 dependencies = [
     "beautifulsoup4==4.12.3",
-    "crewai[tools]==0.148.0",
+    "crewai==0.148.0",
+    "crewai-tools==0.55.0",
     "typing-inspection==0.4.1",
     "embedchain==0.0.73",
 ]
