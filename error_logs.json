@@ -1,5 +1,23 @@
 [
   {
+    "id": "923bed2d-6102-4a48-bb56-82811326d7de",
+    "timestamp": "2025-07-23T18:51:58.911548",
+    "type": "Authentication",
+    "message": "Email processing failed: litellm.AuthenticationError: AuthenticationError: OpenAIException - The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable",
+    "details": "Error during email processing for user . Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "3f8d4d0d-025c-42ed-914b-a3806ec37c4f",
+    "timestamp": "2025-07-23T18:51:58.903946",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.AuthenticationError: AuthenticationError: OpenAIException - The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable",
+    "details": "Error during crew execution for user . Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
     "id": "62783911-b227-401f-a022-79eb86eb9bee",
     "timestamp": "2025-07-23T17:37:42.206723",
     "type": "Authentication",
