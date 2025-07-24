@@ -172,21 +172,25 @@ class OAuth2GetUnreadEmailsToolSchema(BaseModel):
     )
 
 class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
-    """OAuth2 version of the Gmail unread emails fetcher."""
+    """OAuth2 version of the Gmail emails fetcher with flexible search."""
     
     name: str = "OAuth2GetUnreadEmailsTool"
-    description: str = "Fetch unread emails from Gmail using OAuth2 authentication"
+    description: str = "Fetch emails from Gmail using OAuth2 authentication with flexible search queries"
     args_schema: type[BaseModel] = OAuth2GetUnreadEmailsToolSchema
 
     def _run(self, max_emails: int = 50) -> List[Tuple[str, str, str, str, Dict]]:
-        """Fetch unread emails using Gmail API."""
+        """Fetch emails using Gmail API with user-specified search query."""
+        # Get search query from environment, fallback to 'is:unread'
+        search_query = os.environ.get('GMAIL_SEARCH_QUERY', 'is:unread')
+        print(f"Using Gmail search query: {search_query}")
+        
         try:
             service = self._get_gmail_service()
             
-            # Get unread messages
+            # Get messages based on user's filter selection
             results = service.users().messages().list(
                 userId='me',
-                q='is:unread',
+                q=search_query,
                 maxResults=max_emails
             ).execute()
             
@@ -205,11 +209,11 @@ class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
                 email_data = self._gmail_message_to_email_format(message)
                 emails.append(email_data)
             
-            print(f"Fetched {len(emails)} unread emails using OAuth2")
+            print(f"Fetched {len(emails)} emails using OAuth2 with query: {search_query}")
             return emails
             
         except Exception as e:
-            print(f"Error fetching emails with OAuth2: {e}")
+            print(f"Error fetching emails with OAuth2 using query '{search_query}': {e}")
             return []
 
 

@@ -1,5 +1,176 @@
 [
   {
+    "id": "62783911-b227-401f-a022-79eb86eb9bee",
+    "timestamp": "2025-07-23T17:37:42.206723",
+    "type": "Authentication",
+    "message": "Email processing failed: litellm.AuthenticationError: AuthenticationError: OpenAIException - The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable",
+    "details": "Error during email processing for user . Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "0c160989-53c1-4f4c-b4e1-8a3b43e2f1fb",
+    "timestamp": "2025-07-23T17:37:42.198440",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.AuthenticationError: AuthenticationError: OpenAIException - The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable",
+    "details": "Error during crew execution for user . Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "72bedcbb-0d7b-44da-b9e2-fc62f6e94009",
+    "timestamp": "2025-07-23T17:23:58.499198",
+    "type": "Authentication",
+    "message": "Email processing failed: litellm.AuthenticationError: AuthenticationError: OpenAIException - The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable",
+    "details": "Error during email processing for user . Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "d244331d-14f0-4a68-88ce-6b23e8e5c884",
+    "timestamp": "2025-07-23T17:23:58.491421",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.AuthenticationError: AuthenticationError: OpenAIException - The api_key client option must be set either by passing api_key to the client or by setting the OPENAI_API_KEY environment variable",
+    "details": "Error during crew execution for user . Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "ffb0727f-ac30-4d23-9f25-8a570775f84b",
+    "timestamp": "2025-07-23T14:44:37.964071",
+    "type": "Agent",
+    "message": "Email processing failed: 1 validation error for Crew\n  Sequential process error: Agent is missing in the task with the following description: Read the fetched emails from the 'output/fetched_emails.json' file using FileReadTool and categorize each email based on:\n**CATEGORY CLASSIFICATION:** 1. **PERSONAL** - Emails from friends, family, or personal contacts 2. **NEWSLETTER** - Subscriptions, updates, news digest emails   3. **PROMOTION** - Marketing emails, advertisements, sales offers 4. **RECEIPT** - Purchase confirmations, order receipts, payment confirmations 5. **IMPORTANT** - Work-related emails, official correspondence, urgent matters 6. **YOUTUBE** - Any email related to YouTube (comments, notifications, etc.) 7. **OTHER** - Emails that don't fit the above categories\n**PRIORITY ASSIGNMENT (STRICT RULES):** - **HIGH**: Work emergencies, time-sensitive personal matters, important deadlines, urgent official correspondence - **MEDIUM**: Regular work emails, personal emails from close contacts, important notifications, YouTube notifications - **LOW**: Newsletters, promotions, non-urgent notifications, automated emails\n**SPECIAL HANDLING:** - All **YOUTUBE** emails should be marked as **READ_ONLY** (user will respond directly on YouTube) - **RECEIPT** emails should typically be **MEDIUM** priority unless urgent - **PROMOTION** emails are typically **LOW** priority unless from important services - **NEWSLETTER** emails are **LOW** priority unless marked urgent by sender\n**EMAIL AGE CONSIDERATION:** Consider the 'age_days' field when setting priority: - Recent emails (0-1 days) maintain their calculated priority - Older promotional emails (2+ days) should be **LOW** priority - Work emails maintain priority regardless of age\nUse the 'FileReadTool' to read the emails from 'output/fetched_emails.json'.\nYour final answer should be a JSON object with: - emails: Array of email objects with email_id, subject, sender, category, priority, age_days, and reasoning - total_processed: Total number of emails categorized - summary: Brief summary of categorization results\n [type=missing_agent_in_task, input_value={'agents': [Agent(role=Em...tial'>, 'verbose': True}, input_type=dict]",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "login_df627757",
+    "resolved": false
+  },
+  {
+    "id": "8f674d6a-8e31-44c9-ab1e-8503ff8ebb6c",
+    "timestamp": "2025-07-23T14:44:37.323303",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: 1 validation error for Crew\n  Sequential process error: Agent is missing in the task with the following description: Read the fetched emails from the 'output/fetched_emails.json' file using FileReadTool and categorize each email based on:\n**CATEGORY CLASSIFICATION:** 1. **PERSONAL** - Emails from friends, family, or personal contacts 2. **NEWSLETTER** - Subscriptions, updates, news digest emails   3. **PROMOTION** - Marketing emails, advertisements, sales offers 4. **RECEIPT** - Purchase confirmations, order receipts, payment confirmations 5. **IMPORTANT** - Work-related emails, official correspondence, urgent matters 6. **YOUTUBE** - Any email related to YouTube (comments, notifications, etc.) 7. **OTHER** - Emails that don't fit the above categories\n**PRIORITY ASSIGNMENT (STRICT RULES):** - **HIGH**: Work emergencies, time-sensitive personal matters, important deadlines, urgent official correspondence - **MEDIUM**: Regular work emails, personal emails from close contacts, important notifications, YouTube notifications - **LOW**: Newsletters, promotions, non-urgent notifications, automated emails\n**SPECIAL HANDLING:** - All **YOUTUBE** emails should be marked as **READ_ONLY** (user will respond directly on YouTube) - **RECEIPT** emails should typically be **MEDIUM** priority unless urgent - **PROMOTION** emails are typically **LOW** priority unless from important services - **NEWSLETTER** emails are **LOW** priority unless marked urgent by sender\n**EMAIL AGE CONSIDERATION:** Consider the 'age_days' field when setting priority: - Recent emails (0-1 days) maintain their calculated priority - Older promotional emails (2+ days) should be **LOW** priority - Work emails maintain priority regardless of age\nUse the 'FileReadTool' to read the emails from 'output/fetched_emails.json'.\nYour final answer should be a JSON object with: - emails: Array of email objects with email_id, subject, sender, category, priority, age_days, and reasoning - total_processed: Total number of emails categorized - summary: Brief summary of categorization results\n [type=missing_agent_in_task, input_value={'agents': [Agent(role=Em...tial'>, 'verbose': True}, input_type=dict]",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "login_df627757",
+    "resolved": false
+  },
+  {
+    "id": "d6b058bf-b4ce-4743-a458-e0d9219ef53e",
+    "timestamp": "2025-07-23T11:08:38.853338",
+    "type": "Agent",
+    "message": "Email processing failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "login_a2dffd54",
+    "resolved": false
+  },
+  {
+    "id": "0762c5a6-e3e5-4cf0-8cb0-c6c8169f3e18",
+    "timestamp": "2025-07-23T11:08:38.132868",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "login_a2dffd54",
+    "resolved": false
+  },
+  {
+    "id": "95301634-4662-432a-ba68-c2e3de6fcec5",
+    "timestamp": "2025-07-23T11:08:12.234574",
+    "type": "Agent",
+    "message": "Email processing failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "login_4e779a33",
+    "resolved": false
+  },
+  {
+    "id": "49575c1d-7a73-408b-a9d4-25054ca6b17c",
+    "timestamp": "2025-07-23T11:08:11.574052",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "login_4e779a33",
+    "resolved": false
+  },
+  {
+    "id": "c07d64b7-2947-4940-9e54-edd179f57c81",
+    "timestamp": "2025-07-23T11:05:52.739977",
+    "type": "Agent",
+    "message": "Email processing failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "login_26e797a0",
+    "resolved": false
+  },
+  {
+    "id": "70cdd05c-1e3f-4d6f-a889-498be9181f5a",
+    "timestamp": "2025-07-23T11:05:52.035725",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "login_26e797a0",
+    "resolved": false
+  },
+  {
+    "id": "8cb5a82d-5f7b-43bb-9de5-d7463dd91cde",
+    "timestamp": "2025-07-23T11:04:39.396430",
+    "type": "Agent",
+    "message": "Email processing failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "login_37478390",
+    "resolved": false
+  },
+  {
+    "id": "e870ebbd-ab30-48cb-b4c0-f7dee520c473",
+    "timestamp": "2025-07-23T11:04:38.748126",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "login_37478390",
+    "resolved": false
+  },
+  {
+    "id": "dd844419-952c-4768-be1f-f16b4015306b",
+    "timestamp": "2025-07-23T11:03:33.395854",
+    "type": "Agent",
+    "message": "Email processing failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "login_d32c2b4b",
+    "resolved": false
+  },
+  {
+    "id": "370a8888-d8de-4c40-b14b-935ce34aaa0b",
+    "timestamp": "2025-07-23T11:03:32.701642",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "login_d32c2b4b",
+    "resolved": false
+  },
+  {
+    "id": "baab0981-7bb2-41c0-aa6f-844e58ef8434",
+    "timestamp": "2025-07-23T10:58:21.585696",
+    "type": "Agent",
+    "message": "Email processing failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "login_407a2001",
+    "resolved": false
+  },
+  {
+    "id": "0a1e4209-476e-4381-96a8-8a352e24d46e",
+    "timestamp": "2025-07-23T10:58:20.920289",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: crewai.agent.Agent() got multiple values for keyword argument 'verbose'",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: ",
+    "user_id": "login_407a2001",
+    "resolved": false
+  },
+  {
+    "id": "c2359cd5-2f58-4be2-aabd-1919d7a29d1c",
+    "timestamp": "2025-07-23T10:05:44.877951",
+    "type": "Authentication",
+    "message": "Email processing failed: CURRENT_USER_ID environment variable must be set for OAuth2 authentication",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}",
+    "user_id": "user_zhQ7K854ngI_d06711a4",
+    "resolved": false
+  },
+  {
     "id": "2b740f41-639e-415b-bad6-508b2ae6e652",
     "timestamp": "2025-07-17T18:37:10.611569",
     "type": "CrewAI",

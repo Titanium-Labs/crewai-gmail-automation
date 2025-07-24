@@ -8,6 +8,7 @@ import json
 import sys
 import io
 import threading
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import pandas as pd
@@ -31,7 +32,7 @@ except ImportError as e:
 
 
 class SessionManager:
-    """Manages persistent user sessions with 7-day expiration."""
+    """Manages persistent user sessions with improved reliability."""
     
     def __init__(self):
         self.sessions_file = "user_sessions.json"
@@ -109,10 +110,7 @@ class SessionManager:
         return session['user_id']
     
     def invalidate_session(self, session_token: str):
-        """Invalidate a specific session."""
-        if not session_token:
-            return
-            
+        """Invalidate a specific session token."""
         sessions = self.load_sessions()
         if session_token in sessions:
             del sessions[session_token]
@@ -122,8 +120,8 @@ class SessionManager:
         """Remove expired sessions from storage."""
         sessions = self.load_sessions()
         current_time = datetime.now()
-        
         expired_tokens = []
+        
         for token, session in sessions.items():
             try:
                 expires_at = datetime.fromisoformat(session['expires_at'])
@@ -139,46 +137,54 @@ class SessionManager:
             self.save_sessions(sessions)
     
     def set_browser_session(self, session_token: str):
-        """Set session token for persistence across page refreshes."""
-        # Store in Streamlit's session state for persistence
+        """Set session token for persistence across page refreshes using cookies."""
+        # Store in Streamlit's session state for immediate use
         st.session_state.persistent_session_token = session_token
         
-        # Also try to set a browser cookie as backup
+        # Set browser cookie with proper expiry
         expiry_date = (datetime.now() + self.session_duration).strftime("%a, %d %b %Y %H:%M:%S GMT")
         
+        # Use more reliable cookie setting approach
         js_code = f"""
         <script>
-        // Set browser cookie
+        // Set browser cookie for persistent session
         document.cookie = "gmail_crew_session={session_token}; expires={expiry_date}; path=/; SameSite=Lax";
-        
-        // Also store in sessionStorage for more reliable persistence
-        if (typeof(Storage) !== "undefined") {{
-            sessionStorage.setItem("gmail_crew_session_token", "{session_token}");
-        }}
+        console.log("Session cookie set: gmail_crew_session");
         </script>
         """
         components.html(js_code, height=0)
     
     def get_browser_session(self) -> Optional[str]:
-        """Get session token from browser storage or session state."""
-        # First check if we have a stored session token in current session state
+        """Get session token from browser storage or session state with improved reliability."""
+        # First check if we have it in current session state
         if 'persistent_session_token' in st.session_state:
+            print(" Found session token in Streamlit session state")
             return st.session_state.persistent_session_token
         
-        # Try to read from browser storage using JavaScript
-        js_code = """
-        <script>
-        // Try to get session token from browser storage
-        let sessionToken = null;
+        # Check URL parameters first (this handles redirects from cookie reading)
+        query_params = st.query_params
+        if 'session_token' in query_params:
+            session_token = query_params['session_token']
+            print(f" Found session token in URL parameters")
+            # Store it in session state for this session
+            st.session_state.persistent_session_token = session_token
+            # Clear the URL parameter to clean up the URL
+            try:
+                del st.query_params['session_token']
+            except:
+                pass  # Ignore errors when clearing query params
+            return session_token
         
-        // First try sessionStorage
-        if (typeof(Storage) !== "undefined") {
-            sessionToken = sessionStorage.getItem("gmail_crew_session_token");
-        }
-        
-        // If not in sessionStorage, try cookies
-        if (!sessionToken) {
+        # Try to read from browser cookies using JavaScript (only once per session)
+        if not st.session_state.get('cookie_check_attempted', False):
+            st.session_state.cookie_check_attempted = True
+            
+            js_code = """
+            <script>
+            // Try to read session cookie and redirect if found
             const cookies = document.cookie.split(';');
+            let sessionToken = null;
+            
             for (let cookie of cookies) {
                 const [name, value] = cookie.trim().split('=');
                 if (name === 'gmail_crew_session') {
@@ -186,57 +192,35 @@ class SessionManager:
                     break;
                 }
             }
-        }
-        
-        // If found, pass it to Streamlit via URL parameter
-        if (sessionToken) {
-            const currentUrl = new URL(window.location.href);
-            // Only redirect if session_token is not already in URL
-            if (!currentUrl.searchParams.has('session_token')) {
+            
+            if (sessionToken) {
+                console.log("Found session cookie, redirecting with token");
+                const currentUrl = new URL(window.location.href);
                 currentUrl.searchParams.set('session_token', sessionToken);
                 window.location.href = currentUrl.href;
+            } else {
+                console.log("No session cookie found");
             }
-        }
-        </script>
-        """
-        
-        # Only run the JavaScript if we haven't already checked for browser session
-        if not st.session_state.get('browser_session_checked', False):
-            st.session_state.browser_session_checked = True
+            </script>
+            """
             components.html(js_code, height=0)
-        
-        # Check URL parameters for session token
-        query_params = st.query_params
-        if 'session_token' in query_params:
-            session_token = query_params['session_token']
-            # Store it in session state for this session
-            st.session_state.persistent_session_token = session_token
-            # Clear the URL parameter to clean up the URL
-            del st.query_params['session_token']
-            return session_token
+            print(" Attempting to read session cookie from browser")
         
         return None
     
     def clear_browser_session(self):
         """Clear session token from browser and session state."""
         # Clear from Streamlit session state
-        if 'persistent_session_token' in st.session_state:
-            del st.session_state.persistent_session_token
+        for key in ['persistent_session_token', 'cookie_check_attempted']:
+            if key in st.session_state:
+                del st.session_state[key]
         
-        # Clear the browser session check flag so it can check again
-        if 'browser_session_checked' in st.session_state:
-            del st.session_state.browser_session_checked
-        
-        # Clear from browser storage
+        # Clear browser cookie
         js_code = """
         <script>
-        // Clear browser cookie
+        // Clear the session cookie
         document.cookie = "gmail_crew_session=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax";
-        
-        // Clear sessionStorage
-        if (typeof(Storage) !== "undefined") {
-            sessionStorage.removeItem("gmail_crew_session_token");
-        }
+        console.log("Session cookie cleared");
         </script>
         """
         components.html(js_code, height=0)
@@ -332,6 +316,19 @@ def inject_shadcn_css():
     
     /* Target filter buttons only - very specific targeting to avoid affecting other UI elements */
 
+    /* Force filter buttons row to stay horizontal on mobile */
+    div[data-testid="column"]:has(.stButton > button[title*="emails"]) {
+        min-width: 2.8rem !important;
+        flex-shrink: 0 !important;
+    }
+    
+    /* Ensure the columns container doesn't wrap */
+    .stHorizontalBlock {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+    
     /* Very specific targeting for ONLY the 6 filter buttons */
     .stButton > button[title="Unread emails (is:unread)"],
     .stButton > button[title="Starred emails (is:starred)"],
@@ -342,6 +339,7 @@ def inject_shadcn_css():
         width: 2.5rem !important;
         height: 2.5rem !important;
         min-height: 2.5rem !important;
+        min-width: 2.5rem !important;
         border: none !important;
         border-radius: 0.375rem !important;
         padding: 0 !important;
@@ -354,6 +352,47 @@ def inject_shadcn_css():
         color: hsl(var(--secondary-foreground)) !important;
         box-shadow: none !important;
         line-height: 1 !important;
+        flex-shrink: 0 !important;
+    }
+    
+    /* Mobile responsive adjustments - make buttons much smaller to fit 6 in one row */
+    @media (max-width: 768px) {
+        .stButton > button[title="Unread emails (is:unread)"],
+        .stButton > button[title="Starred emails (is:starred)"],
+        .stButton > button[title="Emails with attachments (has:attachment)"],
+        .stButton > button[title="Important emails (is:important)"],
+        .stButton > button[title="Today's emails (newer_than:1d)"],
+        .stButton > button[title="Primary category (category:primary)"] {
+            width: 1.7rem !important;
+            height: 1.7rem !important;
+            min-width: 1.7rem !important;
+            min-height: 1.7rem !important;
+            max-width: 1.7rem !important;
+            font-size: 0.85rem !important;
+            margin: 0.05rem !important;
+            padding: 0 !important;
+            border-radius: 0.25rem !important;
+        }
+        
+        /* Force columns to be very narrow on mobile */
+        div[data-testid="column"]:has(.stButton > button[title*="emails"]) {
+            min-width: 1.8rem !important;
+            max-width: 1.8rem !important;
+            flex-shrink: 0 !important;
+            flex-grow: 0 !important;
+        }
+        
+        /* Ensure the main container has proper spacing on mobile */
+        .main .block-container {
+            max-width: 100% !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+        
+        /* Make sure the horizontal block doesn't wrap and fits */
+        .stHorizontalBlock {
+            gap: 0.1rem !important;
+        }
     }
 
     /* Hover states for filter buttons - exact title matches only */
@@ -710,7 +749,7 @@ class EmailService:
     
     def __init__(self):
         self.approver_email = "articulatedesigns@gmail.com"
-        self.app_url = "http://localhost:8505"  # Change this to your actual app URL
+        self.app_url = "http://localhost:8505"  # Default port for Streamlit app
         self.approval_tokens_file = "approval_tokens.json"
         self.ensure_tokens_file()
     
@@ -1221,6 +1260,48 @@ class UserManager:
                 return {**user_data, 'user_id': user_id}
         return {}
     
+    def make_user_admin(self, email: str) -> bool:
+        """Make a user an admin by email address."""
+        users = self.load_users()
+        
+        for user_id, user_data in users.items():
+            if user_data['email'] == email:
+                user_data['role'] = 'admin'
+                users[user_id] = user_data
+                self.save_users(users)
+                print(f"✅ Made {email} an admin user")
+                return True
+        
+        print(f"❌ User {email} not found")
+        return False
+    
+    def initialize_admin_user(self, email: str) -> bool:
+        """Initialize an admin user if they don't exist."""
+        user_id, user_data = self.get_user_by_email(email)
+        
+        if user_data:
+            # User exists, make them admin
+            return self.make_user_admin(email)
+        else:
+            # User doesn't exist, create them as admin
+            users = self.load_users()
+            user_id = f"user_{secrets.token_urlsafe(8)}"
+            
+            users[user_id] = {
+                "email": email,
+                "status": "approved",
+                "role": "admin",
+                "created_at": datetime.now().isoformat(),
+                "approved_at": datetime.now().isoformat(),
+                "google_id": "",
+                "last_login": None,
+                "is_primary": False
+            }
+            
+            self.save_users(users)
+            print(f"✅ Created and made {email} an admin user")
+            return True
+    
     def has_primary_user(self) -> bool:
         """Check if there's a primary user."""
         return bool(self.get_primary_user())
@@ -1237,55 +1318,7 @@ class UserManager:
         return False
 
 
-def init_session_state():
-    """Initialize Streamlit session state and check for persistent sessions."""
-    if 'user_manager' not in st.session_state:
-        st.session_state.user_manager = UserManager()
-    
-    if 'oauth_manager' not in st.session_state:
-        st.session_state.oauth_manager = OAuth2Manager()
-    
-    if 'stripe_service' not in st.session_state:
-        stripe_key = os.getenv('STRIPE_SECRET_KEY')
-        if stripe_key:
-            st.session_state.stripe_service = StripeService(stripe_key)
-        else:
-            st.session_state.stripe_service = None
-    
-    if 'subscription_manager' not in st.session_state:
-        if st.session_state.stripe_service:
-            st.session_state.subscription_manager = SubscriptionManager(st.session_state.stripe_service)
-        else:
-            st.session_state.subscription_manager = None
-    
-    if 'usage_tracker' not in st.session_state:
-        st.session_state.usage_tracker = UsageTracker()
-    
-    if 'authenticated_user_id' not in st.session_state:
-        st.session_state.authenticated_user_id = None
-    
-    if 'current_user' not in st.session_state:
-        st.session_state.current_user = None
-    
-    if 'authentication_step' not in st.session_state:
-        st.session_state.authentication_step = 'login'
-    
-    if 'new_user_id' not in st.session_state:
-        st.session_state.new_user_id = None
-    
-    # Always check for persistent session on EVERY page load/refresh when not authenticated
-    # This ensures users stay logged in across page refreshes and browser sessions
-    if not st.session_state.authenticated_user_id or st.session_state.authentication_step == 'login':
-        # Prevent infinite rerun loops by checking if we already tried session restoration this run
-        if not st.session_state.get('session_check_completed', False):
-            st.session_state.session_check_completed = True
-            session_restored = check_persistent_session()
-            if session_restored:
-                # Force a rerun to update the UI with the restored session
-                st.rerun()
-    else:
-        # Reset the session check flag when user is authenticated
-        st.session_state.session_check_completed = False
+
 
 
 def check_persistent_session():
@@ -1297,13 +1330,13 @@ def check_persistent_session():
         # Try to get session token from various sources
         browser_session_token = session_manager.get_browser_session()
         
-        # Debug output
-        print(f" Checking persistent session... Token found: {bool(browser_session_token)}")
-        
+        # Enhanced debug output
         if browser_session_token:
+            print(f"✅ Persistent session token found (length: {len(browser_session_token)})")
+            
             # Validate the session
             user_id = session_manager.validate_session(browser_session_token)
-            print(f" Session validation result: user_id={user_id}")
+            print(f"🔍 Session validation result: user_id={user_id}")
             
             if user_id:
                 # Check if user still exists and is approved
@@ -1311,12 +1344,33 @@ def check_persistent_session():
                 users = user_manager.load_users()
                 
                 if user_id in users and users[user_id].get('status') == 'approved':
-                    print(f" User {user_id} found and approved, restoring session...")
+                    print(f"🎉 User {user_id} found and approved, restoring session...")
                     
                     # Restore session state completely
                     st.session_state.authenticated_user_id = user_id
-                    st.session_state.current_user = user_id
-                    st.session_state.authentication_step = 'dashboard'
+                    # We need to find the OAuth user_id that matches this user_id
+                    # Check if there's a valid OAuth token for this user
+                    oauth_manager = st.session_state.oauth_manager
+                    authenticated_users = oauth_manager.list_authenticated_users()
+                    
+                    # Find OAuth user_id by matching email
+                    user_email = users[user_id].get('email', '')
+                    oauth_user_id = None
+                    for oid, email in authenticated_users.items():
+                        if email == user_email:
+                            oauth_user_id = oid
+                            break
+                    
+                    if oauth_user_id:
+                        st.session_state.current_user = oauth_user_id
+                        st.session_state.authentication_step = 'dashboard'
+                    else:
+                        # No valid OAuth token found, user needs to re-authenticate
+                        print(f"❌ No OAuth token found for user {user_email}, clearing session")
+                        session_manager.invalidate_session(browser_session_token)
+                        session_manager.clear_browser_session()
+                        st.session_state.authentication_step = 'login'
+                        return False
                     
                     # Clear any login-related state
                     for key in ['oauth_result', 'oauth_error', 'oauth_processing']:
@@ -1326,27 +1380,27 @@ def check_persistent_session():
                     # Update last login time
                     user_manager.update_last_login(user_id)
                     
-                    print(f" Session successfully restored for user: {user_id}")
+                    print(f"✨ Session successfully restored for user: {user_id}")
                     return True
                 else:
-                    print(f" User {user_id} not found or not approved, clearing session")
+                    print(f"❌ User {user_id} not found or not approved, clearing session")
                     # User no longer exists or not approved, clear session
                     session_manager.invalidate_session(browser_session_token)
                     session_manager.clear_browser_session()
             else:
-                print(" Invalid session token, clearing browser session")
+                print("❌ Invalid session token, clearing browser session")
                 # Invalid session, clear browser storage
                 session_manager.clear_browser_session()
         else:
-            print(" No persistent session token found")
+            print("ℹ️ No persistent session token found")
         
         # No valid session found, ensure we're in login state
         if st.session_state.get('authentication_step') != 'login':
-            print(" Setting authentication step to login")
+            print("🔄 Setting authentication step to login")
             st.session_state.authentication_step = 'login'
         
     except Exception as e:
-        print(f" Error checking persistent session: {e}")
+        print(f"💥 Error checking persistent session: {e}")
         import traceback
         traceback.print_exc()
         # On error, ensure we're in login state
@@ -1794,9 +1848,45 @@ def show_admin_panel():
                 st.info(f"**Email:** {primary_user['email']}")
             with col2:
                 oauth_manager = st.session_state.get('oauth_manager')
-                is_oauth_authenticated = oauth_manager and oauth_manager.is_authenticated(primary_user['user_id'])
+                
+                # Debug: Check what user_id we're using
+                debug_user_id = primary_user['user_id']
+                debug_current_user = st.session_state.get('authenticated_user_id')
+                
+                # Check if we should use the current authenticated user instead
+                # If the current user is the primary owner, use their session user_id
+                user_id_to_check = debug_current_user if debug_current_user else debug_user_id
+                
+                # Also check if the primary owner email matches the current authenticated user
+                if debug_current_user and oauth_manager:
+                    try:
+                        current_user_email = oauth_manager.get_user_email(debug_current_user)
+                        if current_user_email == primary_user.get('email'):
+                            user_id_to_check = debug_current_user
+                    except Exception as e:
+                        pass  # If we can't get email, continue with original logic
+                
+                is_oauth_authenticated = oauth_manager and oauth_manager.is_authenticated(user_id_to_check)
                 auth_status = " OAuth2 Connected" if is_oauth_authenticated else " OAuth2 Not Connected"
+                
+                # Show debug info in admin panel
                 st.info(f"**Status:** {auth_status}")
+                
+                # Add debug information for admin
+                with st.expander("Debug Info", expanded=False):
+                    st.text(f"Primary user_id: {debug_user_id}")
+                    st.text(f"Current authenticated user_id: {debug_current_user}")
+                    st.text(f"Checking authentication for: {user_id_to_check}")
+                    st.text(f"OAuth manager available: {oauth_manager is not None}")
+                    if oauth_manager:
+                        # Check what token files exist
+                        import glob
+                        token_files = glob.glob("tokens/*_token.pickle")
+                        st.text(f"Available token files: {token_files}")
+                        # Check if this specific user has a token file
+                        expected_token_file = f"tokens/{user_id_to_check}_token.pickle"
+                        has_token_file = expected_token_file in token_files
+                        st.text(f"Has token file for {user_id_to_check}: {has_token_file}")
             
             if not is_oauth_authenticated:
                 st.warning(" Primary owner needs to authenticate with OAuth2 to send approval emails automatically.")
@@ -2029,155 +2119,317 @@ def show_oauth_flow():
 
 
 def show_dashboard():
-    """Show main application dashboard."""
-    user_id = st.session_state.current_user
+    """Show the main dashboard with tabbed interface."""
+    # Get current user information
+    user_id = st.session_state.authenticated_user_id
+    oauth_user_id = st.session_state.current_user
     oauth_manager = st.session_state.oauth_manager
     user_manager = st.session_state.user_manager
-    authenticated_user_id = st.session_state.authenticated_user_id
     
-    # Check OAuth2 status and show warning if needed
-    oauth_authenticated = oauth_manager and oauth_manager.is_authenticated(user_id)
-    if not oauth_authenticated:
-        st.warning(" Your Gmail connection needs to be refreshed. Some email features may not work until you re-authenticate. Visit the Settings tab to reconnect.")
+    # Get user email for display
+    try:
+        user_email = oauth_manager.get_user_email(oauth_user_id)
+        user_data = user_manager.get_user_by_id(user_id)
+        is_admin = user_manager.is_admin(user_id)
+    except Exception as e:
+        st.error(f"Error loading user information: {e}")
+        return
     
-    # Get user email and data
-    user_email = oauth_manager.get_user_email(user_id) if oauth_authenticated else "User"
-    user_data = user_manager.get_user_by_id(authenticated_user_id)
+    # Header with user info and logout
+    col1, col2, col3 = st.columns([2, 2, 1])
     
-    # Simple header with user dropdown and help in top-right corner
-    col_header1, col_header2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"# 📧 Gmail CrewAI")
+        if is_admin:
+            st.markdown(f"**👑 Admin:** {user_email}")
+        else:
+            st.markdown(f"**User:** {user_email}")
     
-    with col_header1:
-        st.title(" Gmail CrewAI")
+    with col2:
+        st.markdown("### Welcome to Gmail Automation")
+        st.markdown("*AI-powered email management*")
     
-    with col_header2:
-        # Top-right icons - Help and User
-        help_col, user_col = st.columns([1, 2])
-        
-        with help_col:
-            # Gmail Help icon
-            with st.popover(" Help", use_container_width=True):
-                st.markdown("###  Gmail Search Syntax")
-                
-                st.markdown("""
-                **Basic Operators:**
-                - `from:user@email.com` - From specific sender
-                - `to:user@email.com` - To specific recipient  
-                - `subject:keyword` - Subject contains keyword
-                - `has:attachment` - Has attachments
-                - `is:unread` - Unread emails
-                - `is:starred` - Starred emails
-                - `is:important` - Important emails
-                - `label:work` - Has specific label
-                
-                **Date Operators:**
-                - `older_than:7d` - Older than 7 days
-                - `newer_than:1d` - Newer than 1 day
-                - `larger:5MB` - Larger than 5MB
-                - `filename:pdf` - Has PDF attachment
-                - `category:primary` - In primary category
-                - `"exact phrase"` - Exact phrase match
-                - `keyword1 OR keyword2` - Either keyword
-                - `-keyword` - Exclude keyword
-                    """)
-                
-                st.markdown("**Examples:**")
-                st.code("from:example.com is:unread")
-                st.code("subject:(urgent OR important) has:attachment") 
-                st.code("is:starred newer_than:7d")
-                st.code('to:me "project update"')
-        
-        with user_col:
-            # User dropdown
-            with st.popover(f" {user_email}", use_container_width=True):
-                st.markdown(f"**Current User:**  \n{user_email}")
-                st.markdown(f"**User ID:**  \n{authenticated_user_id}")
-                st.markdown(f"**Role:**  \n{user_data.get('role', 'user').title()}")
-                st.divider()
-                
-                # Admin panel access
-                if user_manager.is_admin(authenticated_user_id):
-                    if st.button(" Admin Panel", use_container_width=True):
-                        st.session_state.authentication_step = 'admin_panel'
-                        st.rerun()
-                
-                if st.button(" Switch User", use_container_width=True):
-                    # Clear persistent session
-                    browser_token = session_manager.get_browser_session()
-                    if browser_token:
-                        session_manager.invalidate_session(browser_token)
-                    session_manager.clear_browser_session()
-                    
-                    # Clear session state
-                    st.session_state.current_user = None
-                    st.session_state.authenticated_user_id = None
-                    st.session_state.authentication_step = 'login'
-                    st.rerun()
-                
-                if st.button(" Logout", use_container_width=True):
-                    # Clear persistent session
-                    browser_token = session_manager.get_browser_session()
-                    if browser_token:
-                        session_manager.invalidate_session(browser_token)
-                    session_manager.clear_browser_session()
-                    
-                    # Clear session state
-                    st.session_state.current_user = None
-                    st.session_state.authenticated_user_id = None
-                    st.session_state.authentication_step = 'login'
-                    st.rerun()
+    with col3:
+        if st.button("🚪 Logout", help="Logout and clear session"):
+            # Clear persistent session
+            browser_token = session_manager.get_browser_session()
+            if browser_token:
+                session_manager.invalidate_session(browser_token)
+            session_manager.clear_browser_session()
+            
+            # Clear session state
+            st.session_state.current_user = None
+            st.session_state.authenticated_user_id = None
+            st.session_state.authentication_step = 'login'
+            st.rerun()
     
-    # Main content tabs right below header  
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([" Email Processing", " Rules", " Email Stats", " Error Logs", " Settings", " Billing", " Help"])
+    st.markdown("---")
     
-    # Initialize session state for processing
-    if 'processing_active' not in st.session_state:
-        st.session_state.processing_active = False
+    # Create tabs - admin tab only visible to admin users
+    if is_admin:
+        tab_names = ["📧 Email Processing", "📊 Reports", "💳 Billing", "⚙️ Settings", "👑 Admin Panel"]
+        tabs = st.tabs(tab_names)
+    else:
+        tab_names = ["📧 Email Processing", "📊 Reports", "💳 Billing", "⚙️ Settings"]
+        tabs = st.tabs(tab_names)
     
-    if 'processing_logs' not in st.session_state:
-        st.session_state.processing_logs = []
-    
-    if 'processing_started' not in st.session_state:
-        st.session_state.processing_started = False
-        
-    if 'processing_stopped' not in st.session_state:
-        st.session_state.processing_stopped = False
-    
-    if 'email_rules' not in st.session_state:
-        st.session_state.email_rules = []
-    
-    with tab1:
+    # Email Processing Tab
+    with tabs[0]:
         show_email_processing_tab(user_id, oauth_manager)
     
-    with tab2:
-        show_rules_tab(user_id, oauth_manager)
+    # Reports Tab
+    with tabs[1]:
+        show_reports_tab(user_id, oauth_manager)
     
-    with tab3:
-        show_email_stats_tab(user_id, oauth_manager)
+    # Billing Tab
+    with tabs[2]:
+        if st.session_state.subscription_manager and st.session_state.usage_tracker:
+            show_billing_tab(st.session_state.subscription_manager, st.session_state.usage_tracker, user_id)
+        else:
+            st.warning("💳 Billing system not configured. Please add Stripe configuration to your .env file.")
     
-    with tab4:
-        show_error_logs_tab(user_id, oauth_manager)
-    
-    with tab5:
+    # Settings Tab
+    with tabs[3]:
         show_settings_tab(user_id, oauth_manager)
     
-    with tab6:
-        # Show billing tab with subscription and usage management
-        if st.session_state.subscription_manager and st.session_state.usage_tracker:
-            show_billing_tab(st.session_state.subscription_manager, st.session_state.usage_tracker, authenticated_user_id)
-        else:
-            st.warning(" Billing system not configured. Please add Stripe configuration to your .env file.")
-            st.code("""
-# Add to your .env file:
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
-STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
-STRIPE_BASIC_PRICE_ID=price_basic_monthly
-STRIPE_PREMIUM_PRICE_ID=price_premium_monthly
-            """)
+    # Admin Panel Tab (only for admin users)
+    if is_admin:
+        with tabs[4]:
+            show_admin_panel_tab(user_id, oauth_manager)
+
+
+def show_email_processing_tab(user_id: str, oauth_manager):
+    """Show the email processing interface."""
+    st.markdown("## 📧 Email Processing")
+    st.markdown("Configure filters and process your emails with AI")
     
-    with tab7:
-        show_help_tab()
+    # Email filters section (existing functionality)
+    show_email_filters_section()
+    
+    # Email rules section (existing functionality) 
+    show_email_rules_section()
+    
+    # Processing controls
+    show_processing_controls(user_id, oauth_manager)
+    
+    # Activity window
+    show_activity_window()
+
+
+def show_reports_tab(user_id: str, oauth_manager):
+    """Show processing reports and results."""
+    st.markdown("## 📊 Processing Reports")
+    st.markdown("View results from your email processing sessions")
+    
+    # Show latest processing reports (existing functionality)
+    show_latest_processing_reports()
+
+
+def show_admin_panel_tab(user_id: str, oauth_manager):
+    """Show admin panel for managing users and system."""
+    st.markdown("## 👑 Admin Panel")
+    st.markdown("Administrative controls and user management")
+    
+    # User management
+    st.markdown("### 👥 User Management")
+    
+    user_manager = st.session_state.user_manager
+    all_users = user_manager.load_users()
+    
+    if not all_users:
+        st.info("No users in the system.")
+        return
+    
+    # Display users in a table format
+    user_data = []
+    for uid, data in all_users.items():
+        user_data.append({
+            "ID": uid,
+            "Email": data.get('email', 'Unknown'),
+            "Status": data.get('status', 'Unknown'),
+            "Role": "👑 Admin" if data.get('is_admin', False) else "User",
+            "Last Login": data.get('last_login', 'Never'),
+            "Created": data.get('created_at', 'Unknown')
+        })
+    
+    df = pd.DataFrame(user_data)
+    st.dataframe(df, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # User Statistics
+    st.markdown("### 📈 User Statistics")
+    
+    # Get primary user
+    primary_user = user_manager.get_primary_user()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Primary Owner")
+        if primary_user:
+            st.markdown(f"**Email:** {primary_user.get('email', 'Unknown')}")
+            
+            # Debug: Check what user_id we're using
+            debug_user_id = primary_user['user_id']
+            debug_current_user = st.session_state.get('authenticated_user_id')
+            
+            # Check if we should use the current authenticated user instead
+            # If the current user is the primary owner, use their session user_id
+            user_id_to_check = debug_current_user if debug_current_user else debug_user_id
+            
+            # Also check if the primary owner email matches the current authenticated user
+            if debug_current_user and oauth_manager:
+                try:
+                    current_user_email = oauth_manager.get_user_email(debug_current_user)
+                    if current_user_email == primary_user.get('email'):
+                        user_id_to_check = debug_current_user
+                except Exception as e:
+                    pass  # Use fallback user_id
+            
+            is_oauth_authenticated = oauth_manager and oauth_manager.is_authenticated(user_id_to_check)
+            auth_status = "✅ OAuth2 Connected" if is_oauth_authenticated else "❌ OAuth2 Not Connected"
+            
+            if is_oauth_authenticated:
+                st.success(f"**Status:** {auth_status}")
+            else:
+                st.error(f"**Status:** {auth_status}")
+                st.info("Primary owner needs to authenticate with OAuth2 to send approval emails automatically.")
+        else:
+            st.warning("No primary owner found.")
+    
+    with col2:
+        # System statistics
+        total_users = len(all_users)
+        approved_users = len([u for u in all_users.values() if u.get('status') == 'approved'])
+        pending_users = len([u for u in all_users.values() if u.get('status') == 'pending'])
+        admin_users = len([u for u in all_users.values() if u.get('is_admin', False)])
+        
+        st.metric("Total Users", total_users)
+        st.metric("Approved", approved_users)
+        st.metric("Pending", pending_users)
+        st.metric("Admins", admin_users)
+    
+    st.markdown("---")
+    
+    # Admin actions
+    st.markdown("### ⚙️ Admin Actions")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("#### Make User Admin")
+        admin_email = st.text_input("Email to promote:", placeholder="user@example.com")
+        if st.button("👑 Make Admin"):
+            if admin_email:
+                if user_manager.make_user_admin(admin_email):
+                    st.success(f"✅ Made {admin_email} an admin user")
+                    st.rerun()
+                else:
+                    st.error(f"❌ Could not make {admin_email} an admin (user not found)")
+    
+    with col2:
+        st.markdown("#### Approve User")
+        if pending_users > 0:
+            pending_list = [(uid, data['email']) for uid, data in all_users.items() if data.get('status') == 'pending']
+            selected_pending = st.selectbox(
+                "Select user to approve:",
+                options=[f"{email} ({uid})" for uid, email in pending_list],
+                format_func=lambda x: x.split(" (")[0]
+            )
+            
+            if st.button("✅ Approve User") and selected_pending:
+                selected_uid = selected_pending.split(" (")[1].rstrip(")")
+                if user_manager.approve_user(selected_uid):
+                    st.success("User approved successfully!")
+                    st.rerun()
+        else:
+            st.info("No pending users")
+    
+    with col3:
+        st.markdown("#### System Maintenance")
+        if st.button("🧹 Cleanup Sessions"):
+            session_manager.cleanup_expired_sessions()
+            st.success("Expired sessions cleaned up!")
+        
+        if st.button("📊 Show System Status"):
+            st.info("System is running normally")
+    
+    st.markdown("---")
+    
+    # Error logs for admins
+    st.markdown("### 🚨 Error Logs")
+    show_error_logs_tab(user_id, oauth_manager)
+
+
+def show_email_filters_section():
+    """Show email filters configuration."""
+    st.markdown("### 🔍 Email Filters")
+    # Add existing filter implementation here
+    pass
+
+
+def show_email_rules_section():
+    """Show email rules configuration."""
+    st.markdown("### 📋 Email Rules")
+    # Add existing rules implementation here
+    pass
+
+
+def show_processing_controls(user_id: str, oauth_manager):
+    """Show processing controls."""
+    st.markdown("### ▶️ Processing Controls")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🚀 Start Processing", type="primary"):
+            st.session_state.processing_active = True
+            process_emails_with_filters(user_id, oauth_manager)
+    
+    with col2:
+        if st.button("⏹️ Stop Processing"):
+            st.session_state.processing_active = False
+            st.session_state.processing_stopped = True
+
+
+def show_activity_window():
+    """Show activity window with real-time logs."""
+    st.markdown("### 📺 Activity Window")
+    
+    if st.session_state.get('activity_logs'):
+        logs_content = "\n".join(st.session_state.activity_logs[-50:])  # Show last 50 logs
+        st.text_area(
+            "Processing Activity:",
+            value=logs_content,
+            height=250,
+            key="activity_display",
+            help="Real-time activity from AI email processing"
+        )
+        
+        if st.button("🗑️ Clear Activity"):
+            st.session_state.activity_logs = []
+            st.rerun()
+    else:
+        st.info("No activity yet. Start email processing to see real-time updates.")
+
+
+def init_session_state():
+    """Initialize session state variables."""
+    defaults = {
+        'authentication_step': 'login',
+        'authenticated_user_id': None,
+        'current_user': None,
+        'processing_active': False,
+        'activity_logs': [],
+        'email_rules': [],
+        'gmail_search': 'is:unread',
+        'filter_max_emails': 10
+    }
+    
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
 def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
@@ -2312,7 +2564,14 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     
     # Max emails input
     with col8:
-        max_emails = st.number_input("Max Emails", min_value=1, max_value=100, value=10, key="filter_max_emails", label_visibility="collapsed")
+        max_emails = st.number_input(
+            "Max Emails", 
+            min_value=1, 
+            max_value=100, 
+            value=st.session_state.get('filter_max_emails', 10), 
+            key="filter_max_emails", 
+            label_visibility="collapsed"
+        )
     
     # Processing control buttons
     with col9:
@@ -2343,85 +2602,87 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     st.markdown("---")
     st.markdown("###  Activity Window")
     
-    # Debug info (can be removed in production)
-    with st.expander("Debug Info", expanded=False):
-        st.write(f"processing_active: {st.session_state.processing_active}")
-        st.write(f"logs_count: {len(st.session_state.processing_logs)}")
-        st.write(f"processing_started: {st.session_state.get('processing_started', False)}")
-        st.write(f"processing_stopped: {st.session_state.get('processing_stopped', False)}")
+    # Initialize activity window state
+    if 'activity_logs' not in st.session_state:
+        st.session_state.activity_logs = []
+    if 'activity_placeholder' not in st.session_state:
+        st.session_state.activity_placeholder = None
     
-    # Show status indicator
-    if st.session_state.processing_active:
-        st.info(" **AI Crew is Active!** Detailed crew activity (agent tasks, tool usage) is visible in your terminal/console where you ran `streamlit run streamlit_app.py`")
-    elif st.session_state.processing_logs:
-        st.success(" Processing completed. Review the logs below for details.")
-    else:
-        st.info(" Ready to process emails. Click 'Start' to begin AI-powered email automation.")
+    # Real-time activity container
+    activity_container = st.container()
+    
+    with activity_container:
+        # Show current status
+        if st.session_state.processing_active:
+            if st.session_state.get('processing_started', False):
+                st.info("🔄 **AI Crew is processing your emails...** Real-time progress shown below.")
+            else:
+                st.info("🚀 **Starting AI Crew...** Initializing agents and tasks.")
+        elif st.session_state.activity_logs:
+            st.success("✅ **Processing completed!** Review the activity log below.")
+        else:
+            st.info("📋 **Ready to process emails.** Click 'Start' to begin and see real-time activity here.")
+        
+        # Live activity log with auto-scroll
+        activity_placeholder = st.empty()
+        
+        # Display activity logs
+        if st.session_state.activity_logs:
+            logs_text = "\n".join(st.session_state.activity_logs)
+            
+            # Add current activity indicator if processing
+            if st.session_state.processing_active:
+                current_time = datetime.now().strftime('%H:%M:%S')
+                logs_text += f"\n[{current_time}] 🔄 Processing in progress..."
+            
+            activity_placeholder.text_area(
+                "Activity Log",
+                value=logs_text,
+                height=200,
+                disabled=True,
+                key="activity_display"
+            )
+        else:
+            activity_placeholder.text_area(
+                "Activity Log", 
+                value="Ready to start processing. Click 'Start' above to begin email automation.",
+                height=200,
+                disabled=True,
+                key="activity_empty"
+            )
     
     # Start processing if needed
     if st.session_state.processing_active and not st.session_state.get('processing_started', False):
         st.session_state.processing_started = True
-        st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Initializing AI crew...")
         
-        # Show processing indicator
-        with st.spinner("AI Crew is processing your emails..."):
-            try:
-                process_emails_with_filters(user_id, oauth_manager)
-                st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Processing completed successfully!")
-            except Exception as e:
-                # Log the error and reset processing state
-                st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Error during processing: {str(e)}")
-                st.error(f"Error during processing: {str(e)}")
-            finally:
-                # Reset processing state
-                st.session_state.processing_active = False
-                st.session_state.processing_started = False
-                st.session_state.processing_stopped = False
+        # Add initial log entry
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 Starting email processing...")
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 📧 Initializing AI crew with OAuth2 authentication...")
+        
+        # Execute the email processing
+        try:
+            # Run the actual processing function which contains all the crew logic
+            process_emails_with_filters(user_id, oauth_manager)
+            
+            # Mark processing as complete
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🎉 Processing pipeline completed!")
+            
+        except Exception as e:
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Error during processing: {str(e)}")
+            st.error(f"Error during processing: {str(e)}")
+        finally:
+            # Reset processing state
+            st.session_state.processing_active = False
+            st.session_state.processing_started = False
+            st.session_state.processing_stopped = False
+            st.rerun()
     
-    # Processing complete - no auto-refresh needed with spinner approach
-    
-    # Display processing logs in a container
-    with st.container():
-        # Show logs if available, otherwise show waiting message
-        if st.session_state.processing_logs:
-            logs_content = "\n".join(st.session_state.processing_logs)
-        else:
-            logs_content = "No processing logs yet. Click 'Start' to begin email processing and see activity here."
-        
-        # Add activity indicator during processing
-        if st.session_state.processing_active:
-            current_time = datetime.now().strftime('%H:%M:%S')
-            logs_content += f"\n[{current_time}]  🔄 Processing active... (spinner shows progress above)"
-            logs_content += f"\n[{current_time}]  📊 Check terminal for detailed crew activity"
-        
-        st.text_area(
-            "Processing Logs",
-            value=logs_content,
-            height=250,
-            key="activity_logs",
-            help="High-level processing status. For detailed AI agent activity, check your terminal/console."
-        )
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            # Only enable clear logs if there are actual logs
-            clear_disabled = not bool(st.session_state.processing_logs)
-            if st.button(" Clear Logs", disabled=clear_disabled):
-                st.session_state.processing_logs = []
-                st.rerun()
-        with col2:
-            # Only enable download if there are actual logs
-            download_disabled = not bool(st.session_state.processing_logs)
-            if not download_disabled:
-                logs_text = "\n".join(st.session_state.processing_logs)
-                st.download_button(
-                    " Download Logs",
-                    logs_text,
-                    file_name=f"processing_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                    mime="text/plain"
-                )
-            else:
-                st.button(" Download Logs", disabled=True)
+    # Clear logs button
+    if st.session_state.activity_logs:
+        if st.button("🗑️ Clear Activity Log", help="Clear the activity log history"):
+            st.session_state.activity_logs = []
+            st.rerun()
+
     
 
 def show_rules_tab(user_id: str, oauth_manager: OAuth2Manager):
@@ -3595,9 +3856,26 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
     
     if st.button(" Refresh Authentication", help="Refresh OAuth2 token"):
         try:
-            # This will automatically refresh if needed
-            oauth_manager.get_gmail_service(user_id)
-            st.success(" Authentication refreshed successfully!")
+            # Get the actual OAuth user ID that matches this internal user ID
+            user_manager = st.session_state.user_manager
+            user_data = user_manager.get_user_by_id(st.session_state.authenticated_user_id)
+            user_email = user_data.get('email', '')
+            
+            # Find the OAuth user ID by matching email
+            authenticated_users = oauth_manager.list_authenticated_users()
+            oauth_user_id = None
+            for oid, email in authenticated_users.items():
+                if email == user_email:
+                    oauth_user_id = oid
+                    break
+            
+            if oauth_user_id:
+                # This will automatically refresh if needed
+                oauth_manager.get_gmail_service(oauth_user_id)
+                st.success(" Authentication refreshed successfully!")
+            else:
+                st.error(f" No OAuth credentials found for {user_email}. Please re-authenticate.")
+                
         except Exception as e:
             st.error(f"Error refreshing authentication: {e}")
     
@@ -3872,13 +4150,14 @@ def process_emails_with_filters(user_id: str, oauth_manager):
         authenticated_user_id = st.session_state.authenticated_user_id
         
         try:
-            # Check if user can process more emails
-            if not usage_tracker.can_process_more_emails(authenticated_user_id):
-                usage_record = usage_tracker.get_usage_for_today(authenticated_user_id)
+            # Check if user can process more emails (admin users have unlimited access)
+            user_manager = st.session_state.user_manager
+            if not usage_tracker.can_process_more_emails(authenticated_user_id, user_manager):
+                usage_record = usage_tracker.get_usage_for_today(authenticated_user_id, user_manager)
                 plan_name = subscription_manager.get_subscription_plan_name(authenticated_user_id)
                 
-                st.session_state.processing_logs.append(
-                    f"[{datetime.now().strftime('%H:%M:%S')}]  Daily email limit reached ({usage_record.emails_processed}/{usage_record.daily_limit})"
+                st.session_state.activity_logs.append(
+                    f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Daily email limit reached ({usage_record.emails_processed}/{usage_record.daily_limit})"
                 )
                 
                 st.warning(f" You've reached your daily email processing limit ({usage_record.emails_processed}/{usage_record.daily_limit}) for your {plan_name} plan.")
@@ -3891,18 +4170,26 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                 return
             
             # Log current usage
-            usage_record = usage_tracker.get_usage_for_today(authenticated_user_id)
-            st.session_state.processing_logs.append(
-                f"[{datetime.now().strftime('%H:%M:%S')}]  Daily usage: {usage_record.emails_processed}/{usage_record.daily_limit}"
-            )
+            user_manager = st.session_state.user_manager
+            usage_record = usage_tracker.get_usage_for_today(authenticated_user_id, user_manager)
+            
+            # Show different message for admin users
+            if user_manager.is_admin(authenticated_user_id):
+                st.session_state.activity_logs.append(
+                    f"[{datetime.now().strftime('%H:%M:%S')}] 👑 Admin user: Unlimited email processing"
+                )
+            else:
+                st.session_state.activity_logs.append(
+                    f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Daily usage: {usage_record.emails_processed}/{usage_record.daily_limit}"
+                )
             
         except Exception as usage_error:
             # Log the billing error but continue processing
-            st.session_state.processing_logs.append(
-                f"[{datetime.now().strftime('%H:%M:%S')}]  Warning: Billing system error: {str(usage_error)}"
+            st.session_state.activity_logs.append(
+                f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Warning: Billing system error: {str(usage_error)}"
             )
-            st.session_state.processing_logs.append(
-                f"[{datetime.now().strftime('%H:%M:%S')}]  Continuing with processing (billing check failed)"
+            st.session_state.activity_logs.append(
+                f"[{datetime.now().strftime('%H:%M:%S')}] ▶️ Continuing with processing (billing check failed)"
             )
             st.warning(f" Warning: Billing system error: {str(usage_error)}")
             st.info(" Continuing with email processing...")
@@ -3922,11 +4209,11 @@ def process_emails_with_filters(user_id: str, oauth_manager):
     activity_placeholder = st.empty()
     
     try:
-        st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Fetching emails with filters...")
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Fetching emails with applied filters...")
         
         # Check for stop signal during processing
         if st.session_state.get('processing_stopped', False):
-            st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Processing stopped before email fetch")
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🛑 Processing stopped before email fetch")
             st.session_state.processing_active = False
             st.session_state.processing_started = False
             st.session_state.processing_stopped = False
@@ -3934,17 +4221,19 @@ def process_emails_with_filters(user_id: str, oauth_manager):
         
         # Set up environment for this user
         user_email = oauth_manager.get_user_email(user_id)
-        st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Processing for user: {user_email}")
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 👤 Processing for user: {user_email}")
         
         # Set filters and rules in environment for crew to use
         os.environ["EMAIL_FILTERS"] = json.dumps(filters)
         os.environ["RULE_INSTRUCTIONS"] = rule_instructions
+        os.environ["GMAIL_SEARCH_QUERY"] = gmail_search
         
-        st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Applied filters: {len([k for k, v in filters.items() if v])} active")
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⚙️ Applied filters: {len([k for k, v in filters.items() if v])} active")
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Using Gmail search: '{gmail_search}'")
         
         # Check for stop signal before crew creation
         if st.session_state.get('processing_stopped', False):
-            st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Processing stopped before crew creation")
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🛑 Processing stopped before crew creation")
             st.session_state.processing_active = False
             st.session_state.processing_started = False
             st.session_state.processing_stopped = False
@@ -3953,13 +4242,13 @@ def process_emails_with_filters(user_id: str, oauth_manager):
         # Create a crew for this specific user 
         crew = create_crew_for_user(user_id, oauth_manager)
         
-        st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  AI crew initialized, starting processing...")
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 AI crew initialized, starting processing...")
         
         # Run the crew with enhanced logging
         try:
-            st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Starting AI crew execution...")
-            st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Initializing AI agents: Categorizer, Organizer, Response Generator, Notifier, Cleaner")
-            st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Processing tasks: Categorization  Organization  Response Generation  Notifications  Cleanup")
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⚡ Starting AI crew execution...")
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🧠 Initializing AI agents: Categorizer, Organizer, Response Generator, Cleaner")
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Processing tasks: Categorization → Organization → Response Generation → Cleanup")
             
             # Create a progress indicator
             progress_placeholder = st.empty()
@@ -3973,7 +4262,7 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             
             # Check if processing was stopped during execution
             if st.session_state.get('processing_stopped', False):
-                st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Processing was stopped during execution")
+                st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🛑 Processing was stopped during execution")
                 error_logger.log_error(
                     "Processing", 
                     "Email processing was stopped by user",
@@ -3981,8 +4270,8 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                     user_id
                 )
             else:
-                st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Email processing completed successfully!")
-                st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  All tasks completed: emails categorized, organized, responses generated, notifications sent, cleanup performed")
+                st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Email processing completed successfully!")
+                st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🎉 All tasks completed: emails categorized, organized, responses generated, cleanup performed")
                 st.success(" Email processing completed!")
                 
                 # Track usage after successful processing
@@ -3992,18 +4281,20 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                         subscription = st.session_state.subscription_manager.get_user_subscription(authenticated_user_id)
                         emails_processed = max_emails  # Number of emails processed
                         
+                        user_manager = st.session_state.user_manager
                         st.session_state.usage_tracker.record_usage(
                             authenticated_user_id, 
                             subscription.plan_type if subscription else PlanType.FREE,
-                            emails_processed
+                            emails_processed,
+                            user_manager
                         )
                         
-                        st.session_state.processing_logs.append(
-                            f"[{datetime.now().strftime('%H:%M:%S')}]  Recorded usage: {emails_processed} emails"
+                        st.session_state.activity_logs.append(
+                            f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Recorded usage: {emails_processed} emails"
                         )
                     except Exception as usage_error:
-                        st.session_state.processing_logs.append(
-                            f"[{datetime.now().strftime('%H:%M:%S')}]  Failed to record usage: {str(usage_error)}"
+                        st.session_state.activity_logs.append(
+                            f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Failed to record usage: {str(usage_error)}"
                         )
                     
             # Reset processing state after successful completion
@@ -4492,6 +4783,12 @@ def main():
     if not show_setup_instructions():
         return
     
+    # Check for persistent session first (before routing to login)
+    if st.session_state.authentication_step == 'login':
+        if check_persistent_session():
+            # Successfully restored session, redirect to dashboard
+            st.rerun()
+    
     # Route to appropriate page based on authentication state
     if st.session_state.authentication_step == 'login':
         show_login_page()
@@ -4500,14 +4797,6 @@ def main():
         st.markdown("#  Authenticating...")
         st.info(" Processing Google authentication, please wait...")
         st.markdown("If you're not redirected automatically, please check your popup blocker and try again.")
-    elif st.session_state.authentication_step == 'admin_panel':
-        # Check authentication before showing admin panel
-        if st.session_state.authenticated_user_id:
-            show_admin_panel()
-        else:
-            st.error(" Please log in to access the admin panel")
-            st.session_state.authentication_step = 'login'
-            st.rerun()
     elif st.session_state.authentication_step == 'select_user':
         show_user_selection()
     elif st.session_state.authentication_step == 'oauth_flow':
@@ -4521,6 +4810,55 @@ def main():
             st.session_state.authentication_step = 'login'
             st.rerun()
 
+
+# Initialize global managers
+def initialize_app():
+    """Initialize app and ensure all required session state variables."""
+    # Initialize managers if not already present
+    if 'user_manager' not in st.session_state:
+        st.session_state.user_manager = UserManager()
+    
+    if 'stripe_service' not in st.session_state:
+        stripe_api_key = os.getenv('STRIPE_SECRET_KEY', '')
+        st.session_state.stripe_service = StripeService(stripe_api_key)
+        
+    if 'subscription_manager' not in st.session_state:
+        st.session_state.subscription_manager = SubscriptionManager(st.session_state.stripe_service)
+        
+    if 'usage_tracker' not in st.session_state:
+        st.session_state.usage_tracker = UsageTracker()
+        
+    if 'session_manager' not in st.session_state:
+        st.session_state.session_manager = SessionManager()
+        
+    if 'oauth_manager' not in st.session_state:
+        st.session_state.oauth_manager = OAuth2Manager()
+    
+    # Initialize admin user only if needed
+    user_manager = st.session_state.user_manager
+    admin_email = "articulatedesigns@gmail.com"
+    admin_user_id, admin_user_data = user_manager.get_user_by_email(admin_email)
+    
+    # Only initialize if user doesn't exist or isn't already an admin
+    if not admin_user_data or admin_user_data.get('role') not in ['admin', 'owner']:
+        user_manager.initialize_admin_user(admin_email)
+    
+    # Initialize other session state variables
+    if 'authentication_step' not in st.session_state:
+        st.session_state.authentication_step = 'login'
+    if 'authenticated_user_id' not in st.session_state:
+        st.session_state.authenticated_user_id = None
+    if 'current_user' not in st.session_state:
+        st.session_state.current_user = None
+    if 'processing_active' not in st.session_state:
+        st.session_state.processing_active = False
+    if 'activity_logs' not in st.session_state:
+        st.session_state.activity_logs = []
+    if 'processing_logs' not in st.session_state:
+        st.session_state.processing_logs = []
+
+# Initialize the app
+initialize_app()
 
 if __name__ == "__main__":
     main() 

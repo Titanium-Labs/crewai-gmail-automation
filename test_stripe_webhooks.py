@@ -10,7 +10,7 @@ import requests
 from datetime import datetime
 
 # Test configuration
-WEBHOOK_URL = "http://localhost:8501/webhook"  # Streamlit webhook endpoint
+WEBHOOK_URL = "http://localhost:8505/webhook"  # Streamlit webhook endpoint
 TEST_STRIPE_WEBHOOK_SECRET = "whsec_test_webhook_secret"
 
 def test_subscription_created():
@@ -213,7 +213,7 @@ def test_subscription_deleted():
 
 if __name__ == "__main__":
     print("🚀 Starting Stripe webhook tests...")
-    print("⚠️  Make sure Streamlit app is running on http://localhost:8501")
+    print("⚠️  Make sure Streamlit app is running on http://localhost:8505")
     print("=" * 60)
     
     success_count = 0

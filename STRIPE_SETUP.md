@@ -154,7 +154,7 @@ To debug webhook events:
 3. Test webhook events using Stripe CLI:
 
 ```bash
-stripe listen --forward-to localhost:8501/webhook/stripe
+stripe listen --forward-to localhost:8505/webhook/stripe
 ```
 
 ## 11. Going Live

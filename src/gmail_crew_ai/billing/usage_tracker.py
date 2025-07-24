@@ -35,7 +35,7 @@ class UsageTracker:
         except Exception as e:
             print(f"Error saving usage: {e}")
 
-    def record_usage(self, user_id: str, plan_type: PlanType, emails_processed: int):
+    def record_usage(self, user_id: str, plan_type: PlanType, emails_processed: int, user_manager=None):
         """Record usage for a user."""
         usage = self.load_usage()
         today_str = date.today().isoformat()
@@ -44,11 +44,16 @@ class UsageTracker:
             usage[user_id] = {}
 
         if today_str not in usage[user_id]:
+            # Set daily limit (unlimited for admins)
+            daily_limit = self.determine_daily_limit(plan_type)
+            if user_manager and user_manager.is_admin(user_id):
+                daily_limit = 999999  # Effectively unlimited
+                
             usage[user_id][today_str] = UsageRecord(
                 user_id=user_id,
                 date=today_str,
                 emails_processed=0,
-                daily_limit=0,
+                daily_limit=daily_limit,
                 plan_type=plan_type,
                 created_at=datetime.now(),
                 updated_at=datetime.now()
@@ -56,7 +61,13 @@ class UsageTracker:
 
         record = UsageRecord.from_dict(usage[user_id][today_str])
         record.emails_processed += emails_processed
-        record.daily_limit = record.daily_limit or self.determine_daily_limit(plan_type)
+        
+        # Ensure daily limit is set correctly (including for admin users)
+        if not record.daily_limit or record.daily_limit == 0:
+            record.daily_limit = self.determine_daily_limit(plan_type)
+            if user_manager and user_manager.is_admin(user_id):
+                record.daily_limit = 999999  # Effectively unlimited
+                
         record.updated_at = datetime.now()
 
         usage[user_id][today_str] = record.to_dict()
@@ -77,27 +88,39 @@ class UsageTracker:
             # Fallback to FREE plan limit
             return 10  # Default FREE plan limit
 
-    def get_usage_for_today(self, user_id: str) -> UsageRecord:
+    def get_usage_for_today(self, user_id: str, user_manager=None) -> UsageRecord:
         """Get today's usage record for a user."""
         usage = self.load_usage()
         today_str = date.today().isoformat()
 
         if user_id in usage and today_str in usage[user_id]:
-            return UsageRecord.from_dict(usage[user_id][today_str])
+            record = UsageRecord.from_dict(usage[user_id][today_str])
+            # Set unlimited limit for admin users
+            if user_manager and user_manager.is_admin(user_id):
+                record.daily_limit = 999999  # Effectively unlimited
+            return record
 
-        # Return a new record with zero values if no record exists
+        # Create new record - set unlimited limit for admin users
+        daily_limit = self.determine_daily_limit(PlanType.FREE)
+        if user_manager and user_manager.is_admin(user_id):
+            daily_limit = 999999  # Effectively unlimited
+            
         return UsageRecord(
             user_id=user_id,
             date=today_str,
             emails_processed=0,
-            daily_limit=self.determine_daily_limit(PlanType.FREE),
+            daily_limit=daily_limit,
             plan_type=PlanType.FREE,
             created_at=datetime.now(),
             updated_at=datetime.now()
         )
 
-    def can_process_more_emails(self, user_id: str) -> bool:
+    def can_process_more_emails(self, user_id: str, user_manager=None) -> bool:
         """Check if user can process more emails today."""
+        # Check if user is admin (unlimited emails)
+        if user_manager and user_manager.is_admin(user_id):
+            return True
+        
         usage_record = self.get_usage_for_today(user_id)
         return usage_record.emails_processed < usage_record.daily_limit
 

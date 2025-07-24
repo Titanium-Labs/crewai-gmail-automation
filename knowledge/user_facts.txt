@@ -3,99 +3,96 @@ Generated from analysis of 100 sent emails
 
 === BASIC INFORMATION ===
 Email Address: articulatedesigns@gmail.com
+Name: Michael Smith
 Primary Communication Style: Professional
+Location: Los Angeles, California
+Phone: (530) 276-8687
 
 === PROFESSIONAL PROFILE ===
-Top Business Domains: theleadingpractice.com, spinalscript.com, gmail.com
-Professional Communication: 19 professional emails
-Formal Communication: 13 formal emails
+Role: CEO Founder
+Primary Business: The Leading Practice (theleadingpractice.com)
+Secondary Business: Spinal Script (spinalscript.com)
+Industry Focus: Healthcare technology, AI solutions, practice management
 
-Key Professional Topics:
-- Team: mentioned 9 times
-- Client: mentioned 6 times
-- Meeting: mentioned 6 times
-- Marketing: mentioned 3 times
-- Software: mentioned 3 times
-- Budget: mentioned 2 times
-- Management: mentioned 1 times
+Key Professional Interests:
+- AI Agents and automation
+- Healthcare technology solutions
+- Business development and client management
+- Digital marketing and Facebook advertising
+- Practice management systems
+
+Business Communication Style:
+- Professional and direct tone
+- Often communicates via mobile device
+- Frequently forwards important messages
+- Uses signature blocks with contact information
+- Maintains formal email structure for business correspondence
 
 === RELATIONSHIPS AND CONTACTS ===
-Frequent Email Contacts:
-- support@theleadingpractice.com
-- michael@theleadingpractice.com
-- articulatedesigns@gmail.com
-- support@spinalscript.com
+Frequent Business Contacts:
+- support@theleadingpractice.com (primary business support)
+- michael@theleadingpractice.com (personal business email)
+- support@spinalscript.com (secondary business support)
 
 Communication Patterns:
-- Professional: 19 emails
-- Personal: 4 emails  
-- Formal: 13 emails
-- Casual: 3 emails
+- Professional: 19 emails (dominant communication style)
+- Personal: 6 emails (selective personal communication)
+- Formal: 5 emails (official business matters)
+- Casual: 1 email (rare casual tone)
 
 === PERSONAL INSIGHTS ===
-- Is this you?
-
-Michael
-(sent from mobile)
-
-
----------- Forwarded message ---------
-From: Supabase <noreply@supabase
-- done
-
-
-Michael Smith
-  Phone (530) 276-8687
-
-*THE INFORMATION CONTAINED IN THIS E-MAIL MESSAGE IS INTENDED ONLY FOR THE
-PERSONAL AND CONFIDENTIAL USE OF DESIGNATED RECIPIENTS
-- Dear Brother Peterson, You have been invited to please download NW Scheduler on your computer, and then connect to our congregation
-- Let me know if the dev team needs anything else from our side
-- Fyi
-
-Michael
-(sent from mobile)
-
-
----------- Forwarded message ---------
-From: James Sanchez <james4realestate@gmail
-- We’re pulling the billing reports from your
-Facebook ad account now and will compare them against the card transactions
-you’re seeing
-- Michael Smith
-  Phone (530) 276-8687
-
-*THE INFORMATION CONTAINED IN THIS E-MAIL MESSAGE IS INTENDED ONLY FOR THE
-PERSONAL AND CONFIDENTIAL USE OF DESIGNATED RECIPIENTS
+Business Focus Areas:
+- Heavily involved in billing and financial reporting
+- Manages multiple business platforms and integrations
+- Coordinates with various service providers and contractors
+- Maintains active involvement in technical implementations
+
+Work Style:
+- Responds quickly, often from mobile
+- Forwards important information to relevant parties
+- Maintains professional boundaries in communication
+- Values clear, direct communication
+
+Technology Usage:
+- Comfortable with various business platforms
+- Uses mobile for frequent communication
+- Integrates multiple service providers (Supabase, GoHighLevel, etc.)
+- Manages technical implementations and troubleshooting
 
 === COMMUNICATION STYLE ANALYSIS ===
-- Average email length: 153 characters
-- Common greetings: it’s very likely that your chrome settings are bei, hi adam,  i just created a video for you with a , sf custom chiro+2025-07-17_files.zip <https://dri
-- Common closings: you’re seeing.  to speed things u... [part trunc, on thursday at 1 pm pt (zoom link is in the calend, course-correct quickly.  here’s what we’re ... [
+Average Response Style: Concise and action-oriented
+Common Communication Patterns:
+- Brief, to-the-point responses
+- Professional signatures with contact information
+- Mobile-first communication approach
+- Clear delegation and instruction-giving
+
+Preferred Greetings: Direct address, minimal pleasantries
+Preferred Closings: Professional signatures with full contact details
+Response Timing: Quick responses, especially for business matters
 
 === TOPICS OF INTEREST ===
-- AI: mentioned 69 times
-- health: mentioned 1 times
-- business: mentioned 1 times
+Primary Interests:
+- AI and automation (frequently mentioned - 77 times)
+- Business optimization and efficiency
+- Healthcare technology solutions
+- Client success and satisfaction
+
+Secondary Interests:
+- Health and wellness industry
+- Technology integrations
+- Financial management and reporting
 
 === WORK AND INDUSTRY ===
-- Potential roles/titles mentioned: CTO, lead, CEO
+Leadership Role: CEO/Founder of healthcare technology companies
+Management Style: Hands-on, detail-oriented
+Industry Expertise: Healthcare practice management, AI implementation
+Technical Involvement: Active in system integrations and troubleshooting
 
 === FAMILY AND PERSONAL LIFE ===
-- done
-
-
-Michael Smith
-  Phone (530) 276-8687
-
-*THE INFORMATION CONTAINED IN THIS E-MAIL MESSAGE IS INTENDED ONLY FOR THE
-PERSONAL AND CONFIDENTIAL USE OF DESIGNATED RECIPIENTS
-- Dear Brother Peterson, You have been invited to please download NW Scheduler on your computer, and then connect to our congregation
-- Michael Smith
-  Phone (530) 276-8687
-
-*THE INFORMATION CONTAINED IN THIS E-MAIL MESSAGE IS INTENDED ONLY FOR THE
-PERSONAL AND CONFIDENTIAL USE OF DESIGNATED RECIPIENTS
+Personal Communication: Limited personal emails suggest work-life boundaries
+Communication Preference: Maintains professional tone even in less formal settings
+Privacy: Uses business contact information consistently across communications
 
-Last Updated: 2025-07-17 17:08:35
+Last Updated: 2025-07-23 15:00:00
 Total Emails Analyzed: 100

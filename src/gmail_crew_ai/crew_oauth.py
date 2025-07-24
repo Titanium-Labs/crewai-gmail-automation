@@ -156,10 +156,13 @@ class OAuth2GmailCrewAi:
     @agent
     def categorizer(self) -> Agent:
         """The email categorizer agent."""
+        config = self.agents_config['categorizer']
         return Agent(
-            **self.agents_config['categorizer'],
+            role=config['role'],
+            goal=config['goal'],
+            backstory=config['backstory'],
+            memory=config.get('memory', True),
             tools=[FileReadTool()],
-            verbose=True,
             llm=self.llm
         )
 
@@ -167,10 +170,13 @@ class OAuth2GmailCrewAi:
     def organizer(self) -> Agent:
         """The email organizer agent."""
         gmail_tools = self._get_gmail_tools()
+        config = self.agents_config['organizer']
         return Agent(
-            **self.agents_config['organizer'],
+            role=config['role'],
+            goal=config['goal'],
+            backstory=config['backstory'],
+            memory=config.get('memory', True),
             tools=[*gmail_tools, FileReadTool()],
-            verbose=True,
             llm=self.llm
         )
 
@@ -178,10 +184,13 @@ class OAuth2GmailCrewAi:
     def response_generator(self) -> Agent:
         """The email response generator agent."""
         gmail_tools = self._get_gmail_tools()
+        config = self.agents_config['response_generator']
         return Agent(
-            **self.agents_config['response_generator'],
+            role=config['role'],
+            goal=config['goal'], 
+            backstory=config['backstory'],
+            memory=config.get('memory', True),
             tools=[*gmail_tools, FileReadTool()],
-            verbose=True,
             llm=self.llm
         )
 
@@ -189,10 +198,13 @@ class OAuth2GmailCrewAi:
     def cleaner(self) -> Agent:
         """The email cleanup specialist agent."""
         gmail_tools = self._get_gmail_tools()
+        config = self.agents_config['cleaner']
         return Agent(
-            **self.agents_config['cleaner'],
+            role=config['role'],
+            goal=config['goal'],
+            backstory=config['backstory'],
+            memory=config.get('memory', True),
             tools=[*gmail_tools, DateCalculationTool(), FileReadTool()],
-            verbose=True,
             llm=self.llm
         )
 
@@ -201,6 +213,7 @@ class OAuth2GmailCrewAi:
         """The email categorization task."""
         return Task(
             config=self.tasks_config['categorization_task'],
+            agent=self.categorizer(),
             output_file="output/categorization_report.json"
         )
 
@@ -209,6 +222,7 @@ class OAuth2GmailCrewAi:
         """The email organization task."""
         return Task(
             config=self.tasks_config['organization_task'],
+            agent=self.organizer(),
             output_file="output/organization_report.json"
         )
 
@@ -217,6 +231,7 @@ class OAuth2GmailCrewAi:
         """The email response task."""
         return Task(
             config=self.tasks_config['response_task'],
+            agent=self.response_generator(),
             output_file="output/response_report.json"
         )
 
@@ -225,6 +240,7 @@ class OAuth2GmailCrewAi:
         """The email cleanup task."""
         return Task(
             config=self.tasks_config['cleanup_task'],
+            agent=self.cleaner(),
             output_file="output/cleanup_report.json"
         )
 

@@ -149,8 +149,8 @@ def show_billing_management(subscription_manager: SubscriptionManager, user_id: 
                     st.error("❌ Failed to update plan. Please try again.")
             else:
                 # Redirect to Stripe for paid plans
-                success_url = "http://localhost:8501?payment_success=true"
-                cancel_url = "http://localhost:8501?payment_canceled=true"
+                success_url = "http://localhost:8505?payment_success=true"
+                cancel_url = "http://localhost:8505?payment_canceled=true"
                 
                 checkout_url = subscription_manager.create_checkout_session(
                     user_id, new_plan, success_url, cancel_url

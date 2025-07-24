@@ -4,7 +4,7 @@
 # This ensures Streamlit binds to the correct host and port
 
 streamlit run streamlit_app.py \
-  --server.port=${PORT:-8501} \
+  --server.port=${PORT:-8505} \
   --server.address=0.0.0.0 \
   --server.headless=true \
   --server.enableCORS=false \
