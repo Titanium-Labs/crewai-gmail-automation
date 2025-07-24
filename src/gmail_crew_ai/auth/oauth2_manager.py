@@ -31,8 +31,13 @@ class OAuth2Manager:
     
     def __init__(self, credentials_file: str = "credentials.json"):
         """Initialize OAuth2 manager."""
-        self.credentials_file = credentials_file
-        self.tokens_dir = Path("tokens")
+        # Support Docker data directory structure
+        if os.path.exists("/app/data"):
+            self.credentials_file = f"/app/data/{credentials_file}"
+            self.tokens_dir = Path("/app/data/tokens")
+        else:
+            self.credentials_file = credentials_file
+            self.tokens_dir = Path("tokens")
         self.tokens_dir.mkdir(exist_ok=True)
         
     def get_authorization_url(self, user_id: str) -> str:
