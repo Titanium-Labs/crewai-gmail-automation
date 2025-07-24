@@ -162,6 +162,35 @@ gmail-crewai/
 
 ## 🛠️ Troubleshooting
 
+### PowerShell PSReadLine Error Fix
+
+If you encounter a PowerShell error about `PredictionSource` parameter when using Warp terminal, this is due to PSReadLine version compatibility. We've included a fix:
+
+1. **Automatic Fix**: Run the provided installer:
+   ```bash
+   # Install the profile for current user
+   powershell.exe -ExecutionPolicy Bypass -File install-profile.ps1
+   ```
+
+2. **Manual Fix**: Copy `profile.ps1` to your PowerShell profile location:
+   ```powershell
+   # Find your profile location
+   $PROFILE
+   
+   # Copy the profile (create directory if needed)
+   $profileDir = Split-Path $PROFILE -Parent
+   if (!(Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force }
+   Copy-Item "profile.ps1" $PROFILE -Force
+   ```
+
+3. **How it works**:
+   - Detects your PSReadLine version automatically
+   - Uses `PredictionSource` parameter only if PSReadLine >= 2.2
+   - Falls back to compatible options for older versions (like PSReadLine 2.0)
+   - Eliminates the parameter error completely
+
+4. **Restart** your PowerShell session or Warp terminal after installation.
+
 See the [OAuth2 Setup Guide](OAUTH2_SETUP.md) for detailed troubleshooting steps.
 
 ## 🆘 Getting Help
