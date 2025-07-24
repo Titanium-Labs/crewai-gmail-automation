@@ -49,6 +49,8 @@ organization_task:
     - **HIGH** priority: Yellow star (⭐)
     - **MEDIUM** priority: Orange star 
     - **LOW** priority: No star
+    - **EMAILS NEEDING RESPONSES**: Always star regardless of priority (these include PERSONAL emails with HIGH or MEDIUM priority that will get draft replies)
+    - **IMPORTANT** category emails: Always star regardless of priority
     
     **Labels to Apply:**
     - **PERSONAL**: Apply "Personal" label
@@ -69,7 +71,12 @@ organization_task:
     - **RECEIPT** emails: Apply "Archive" label for better organization
     - Emails older than 7 days: Add "Needs Review" label
     
-    Use the 'GmailOrganizeTool' to apply labels and stars to each email based on the categorization.
+    **CRITICAL: Response Coordination Rules**
+    - **PERSONAL** emails with **HIGH** or **MEDIUM** priority: These will get draft replies, so ALWAYS STAR them
+    - **IMPORTANT** emails with **HIGH** or **MEDIUM** priority: These need attention, so ALWAYS STAR them
+    - Any email in **IMPORTANT** category: ALWAYS STAR regardless of priority
+    
+    Use the 'OAuth2GmailOrganizeTool' to apply labels and stars to each email based on the categorization.
     
     Your final answer should be a JSON object with:
     - emails: Array of email objects with email_id, subject, labels_applied, star_applied, and organization_status
@@ -112,15 +119,30 @@ response_task:
     - Use appropriate tone based on the relationship with the recipient
     - Reference shared interests or past interactions if relevant
     
-    Use the 'OAuth2SaveDraftTool' tool with:
+    MANDATORY: For each email that needs a response, you MUST use the 'OAuth2SaveDraftTool' tool:
+    
+    STEP 1: Call OAuth2SaveDraftTool with these exact parameters:
+    - recipient: The sender's email address (extract from sender field)
     - subject: Add "Re: " to the original subject
-    - body: Your response (personalized using user persona information)
-    - recipient: The extracted username + "@gmail.com" or use "user@example.com" if you can't extract it
+    - body: Your personalized response (using user persona information)
+    - in_reply_to: Use the email_id if this is a reply
+    
+    STEP 2: Verify the tool call was successful by checking the return message
+    
+    STEP 3: Only mark draft_saved as true if OAuth2SaveDraftTool returned success
+    
+    STEP 4: For emails where you successfully saved a draft, use OAuth2GmailOrganizeTool to add a star:
+    - email_id: The email ID
+    - star: true
+    - This ensures emails with draft replies are easily identifiable
+    
+    CRITICAL: You must actually call the OAuth2SaveDraftTool for each response. Do not just claim to have saved drafts - actually use the tool.
     
     Your final answer should be a JSON object with:
     - emails: Array of email objects with email_id, subject, recipient, response_summary, response_needed (boolean), and draft_saved (boolean)
     - total_processed: Number of emails processed
     - responses_generated: Number of responses created
+    - tool_calls_made: Number of actual OAuth2SaveDraftTool calls made
     - summary: Brief summary of response generation results
   expected_output: >
     A comprehensive response report detailing which emails received draft responses and which were marked as no response needed, with reasoning for each decision.

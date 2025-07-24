@@ -179,7 +179,7 @@ class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
     args_schema: type[BaseModel] = OAuth2GetUnreadEmailsToolSchema
 
     def _run(self, max_emails: int = 50) -> List[Tuple[str, str, str, str, Dict]]:
-        """Fetch emails using Gmail API with user-specified search query."""
+        """Fetch emails using Gmail API with user-specified search query in chronological descending order."""
         # Get search query from environment, fallback to 'is:unread'
         search_query = os.environ.get('GMAIL_SEARCH_QUERY', 'is:unread')
         print(f"Using Gmail search query: {search_query}")
@@ -195,7 +195,7 @@ class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
             ).execute()
             
             messages = results.get('messages', [])
-            emails = []
+            emails_with_dates = []
             
             for msg in messages:
                 # Get full message
@@ -207,9 +207,37 @@ class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
                 
                 # Convert to email format
                 email_data = self._gmail_message_to_email_format(message)
-                emails.append(email_data)
+                
+                # Extract date for sorting
+                thread_info = email_data[4]  # thread_info is the 5th element
+                date_str = thread_info.get('date', '')
+                
+                # Parse date for sorting (use internalDate as fallback for more reliable sorting)
+                try:
+                    # Gmail API provides internalDate as timestamp in milliseconds
+                    internal_date = int(message.get('internalDate', 0))
+                    sort_timestamp = internal_date
+                except (ValueError, TypeError):
+                    # Fallback to parsing the date header
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        if date_str:
+                            parsed_date = parsedate_to_datetime(date_str)
+                            sort_timestamp = int(parsed_date.timestamp() * 1000)  # Convert to milliseconds
+                        else:
+                            sort_timestamp = 0
+                    except Exception:
+                        sort_timestamp = 0
+                
+                emails_with_dates.append((email_data, sort_timestamp))
             
-            print(f"Fetched {len(emails)} emails using OAuth2 with query: {search_query}")
+            # Sort by timestamp in descending order (newest first)
+            emails_with_dates.sort(key=lambda x: x[1], reverse=True)
+            
+            # Extract just the email data (without the timestamp)
+            emails = [email_data for email_data, _ in emails_with_dates]
+            
+            print(f"Fetched and sorted {len(emails)} emails in chronological descending order using OAuth2 with query: {search_query}")
             return emails
             
         except Exception as e:
@@ -373,6 +401,14 @@ class OAuth2SaveDraftTool(OAuth2GmailToolBase):
     name: str = "OAuth2SaveDraftTool"
     description: str = "Save email drafts in Gmail using OAuth2 authentication"
     args_schema: type[BaseModel] = OAuth2SaveDraftToolSchema
+
+    def __init__(self, user_id: Optional[str] = None, oauth_manager: Any = None):
+        super().__init__(
+            user_id=user_id, 
+            oauth_manager=oauth_manager,
+            name="OAuth2SaveDraftTool",
+            description="Save email drafts in Gmail using OAuth2 authentication"
+        )
 
     def _run(self, recipient: str, subject: str, body: str, in_reply_to: Optional[str] = None) -> str:
         """Save email draft using Gmail API."""

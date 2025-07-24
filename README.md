@@ -143,12 +143,46 @@ gmail-crewai/
 ├── tokens/                   # User tokens directory (auto-created)
 │   ├── user1_abc123_token.pickle
 │   └── user2_def456_token.pickle
+├── logs/                     # Log files with auto-rotation (auto-created)
+│   ├── app.log              # General application logs
+│   ├── system.log           # System warnings and errors
+│   ├── auth.log             # Authentication logs
+│   ├── billing.log          # Billing and subscription logs
+│   └── crew.log             # CrewAI processing logs
+├── scripts/                  # Utility scripts
+│   └── cleanup_logs.py      # Automated log cleanup
+├── docs/                     # Documentation
+│   └── WINDOWS_TASK_SCHEDULER_SETUP.md
 ├── output/                   # Processing results (auto-created)
 ├── streamlit_app.py         # Main web interface
 ├── requirements.txt         # Dependencies
 ├── .env                     # Environment variables
 ├── .gitignore              # Include credentials.json here!
 └── src/gmail_crew_ai/      # Main application code
+```
+
+## 📝 Logging & Monitoring
+
+**Log files live in `/logs` and auto-rotate** with the following configuration:
+
+- **Daily Rotation**: Log files rotate at midnight
+- **14-Day Retention**: Automatically keeps 14 days of rotated logs
+- **Multiple Log Files**:
+  - `app.log` - General application logs (INFO level)
+  - `system.log` - System warnings and errors (WARNING+ level)
+  - `auth.log` - Authentication and OAuth2 events
+  - `billing.log` - Billing and subscription activities
+  - `crew.log` - CrewAI agent processing logs
+
+**Automated Cleanup**:
+- Daily cleanup via GitHub Actions (scheduled at 2 AM UTC)
+- Windows Task Scheduler support for local installations
+- Removes log files and archived JSONs older than 30 days
+- See `docs/WINDOWS_TASK_SCHEDULER_SETUP.md` for local automation setup
+
+**Manual Cleanup**:
+```bash
+python scripts/cleanup_logs.py
 ```
 
 ## 🔒 Security Features

@@ -1,0 +1,83 @@
+name: Log Cleanup
+
+on:
+  # Run daily at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      days_to_keep:
+        description: 'Number of days to keep logs (default: 30)'
+        required: false
+        default: '30'
+        type: string
+
+jobs:
+  cleanup-logs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Only install minimal dependencies needed for cleanup script
+        pip install pathlib
+        
+    - name: Create logs directory if it doesn't exist
+      run: |
+        mkdir -p logs
+        
+    - name: Run log cleanup script
+      run: |
+        cd ${{ github.workspace }}
+        python scripts/cleanup_logs.py
+        
+    - name: Commit and push cleaned up repository
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add -A
+        
+        # Only commit if there are changes
+        if ! git diff --staged --quiet; then
+          git commit -m "🧹 Automated log cleanup - removed files older than 30 days"
+          git push
+        else
+          echo "No changes to commit - no old log files found"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Create cleanup summary
+      run: |
+        echo "## Log Cleanup Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Date**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        if [ -f cleanup_logs.log ]; then
+          echo "- **Details**: See cleanup log below" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Cleanup Log" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -20 cleanup_logs.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Status**: No cleanup log generated" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: Upload cleanup log as artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: cleanup-log-${{ github.run_id }}
+        path: cleanup_logs.log
+        retention-days: 7

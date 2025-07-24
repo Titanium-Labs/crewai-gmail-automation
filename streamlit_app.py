@@ -17,17 +17,83 @@ import secrets
 import urllib.parse
 import base64
 
-# Import our modules
+# Helper function for safe imports with detailed diagnostics
+def safe_import(module_path, alias=None):
+    """Safely import a module with detailed logging for troubleshooting.
+    
+    Args:
+        module_path: The module to import (e.g., 'src.common.logger')
+        alias: Optional alias for the import (e.g., 'logger')
+    
+    Returns:
+        The imported module or None if import failed
+    """
+    try:
+        # Import the module
+        if '.' in module_path:
+            # Handle package imports like 'from src.common.logger import get_logger'
+            package_path, module_name = module_path.rsplit('.', 1)
+            package = __import__(package_path, fromlist=[module_name])
+            module = getattr(package, module_name)
+        else:
+            # Handle simple imports
+            module = __import__(module_path)
+        
+        # Set the module in global namespace with appropriate name
+        globals()[alias or module_path.split('.')[-1]] = module
+        return module
+        
+    except Exception as e:
+        # Import logger first if it doesn't exist yet
+        if 'log' not in globals():
+            try:
+                from src.common.logger import get_logger, exception_info
+                globals()['log'] = get_logger(__name__)
+                globals()['exception_info'] = exception_info
+            except Exception:
+                # Fallback to basic logging if logger import fails
+                import logging
+                logging.basicConfig(level=logging.ERROR)
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to import logger module: {e}")
+                st.error(f"Failed to import logging system: {e}")
+                raise
+        
+        # Log the detailed error with stack trace
+        exception_info(log, f"Import failed: {module_path}")
+        
+        # Also display in Streamlit UI for user visibility
+        st.error(f"❌ Import error for {module_path}: {e}")
+        st.error("Please ensure all dependencies are installed: pip install -r requirements.txt")
+        
+        # Re-raise the exception so it appears in UI
+        raise
+
+# Import our modules with safe_import helper
 try:
-    from src.gmail_crew_ai.auth import OAuth2Manager
-    from src.gmail_crew_ai.crew_oauth import OAuth2GmailCrewAi, create_crew_for_user
-    from src.gmail_crew_ai.models import EmailDetails
-    from src.gmail_crew_ai.billing import StripeService, SubscriptionManager, UsageTracker
-    from src.gmail_crew_ai.billing.streamlit_billing import show_billing_tab
-    from src.gmail_crew_ai.billing.models import PlanType
-except ImportError as e:
-    st.error(f"Import error: {e}")
-    st.error("Please ensure all dependencies are installed: pip install -r requirements.txt")
+    # First import the logger system
+    safe_import('src.common.logger.get_logger', 'get_logger')
+    safe_import('src.common.logger.exception_info', 'exception_info')
+    
+    # Initialize logger
+    log = get_logger(__name__)
+    
+    # Now import other modules with detailed logging
+    safe_import('src.gmail_crew_ai.auth.OAuth2Manager', 'OAuth2Manager')
+    safe_import('src.gmail_crew_ai.crew_oauth.OAuth2GmailCrewAi', 'OAuth2GmailCrewAi')
+    safe_import('src.gmail_crew_ai.crew_oauth.create_crew_for_user', 'create_crew_for_user')
+    safe_import('src.gmail_crew_ai.models.EmailDetails', 'EmailDetails')
+    safe_import('src.gmail_crew_ai.billing.StripeService', 'StripeService')
+    safe_import('src.gmail_crew_ai.billing.SubscriptionManager', 'SubscriptionManager')
+    safe_import('src.gmail_crew_ai.billing.UsageTracker', 'UsageTracker')
+    safe_import('src.gmail_crew_ai.billing.streamlit_billing.show_billing_tab', 'show_billing_tab')
+    safe_import('src.gmail_crew_ai.billing.models.PlanType', 'PlanType')
+    
+except Exception as e:
+    # Final catch-all for any import errors
+    st.error(f"❌ Critical import error: {e}")
+    st.error("Application cannot start due to missing dependencies or modules.")
+    st.error("Please check the logs above for detailed error information.")
     st.stop()
 
 
@@ -58,7 +124,7 @@ class SessionManager:
             with open(self.sessions_file, 'w', encoding='utf-8') as f:
                 json.dump(sessions, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"Error saving sessions: {e}")
+            exception_info(log, "Failed to save sessions")
     
     def create_session(self, user_id: str) -> str:
         """Create a new session token for a user."""
@@ -158,14 +224,14 @@ class SessionManager:
         """Get session token from browser storage or session state with improved reliability."""
         # First check if we have it in current session state
         if 'persistent_session_token' in st.session_state:
-            print(" Found session token in Streamlit session state")
+            log.debug("Found session token in Streamlit session state")
             return st.session_state.persistent_session_token
         
         # Check URL parameters first (this handles redirects from cookie reading)
         query_params = st.query_params
         if 'session_token' in query_params:
             session_token = query_params['session_token']
-            print(f" Found session token in URL parameters")
+            log.debug("Found session token in URL parameters")
             # Store it in session state for this session
             st.session_state.persistent_session_token = session_token
             # Clear the URL parameter to clean up the URL
@@ -204,7 +270,7 @@ class SessionManager:
             </script>
             """
             components.html(js_code, height=0)
-            print(" Attempting to read session cookie from browser")
+            log.debug("Attempting to read session cookie from browser")
         
         return None
     
@@ -392,6 +458,99 @@ def inject_shadcn_css():
         /* Make sure the horizontal block doesn't wrap and fits */
         .stHorizontalBlock {
             gap: 0.1rem !important;
+        }
+    }
+
+    /* Custom tooltip styling for filter buttons */
+    .stButton > button[title="Unread emails (is:unread)"],
+    .stButton > button[title="Starred emails (is:starred)"],
+    .stButton > button[title="Emails with attachments (has:attachment)"],
+    .stButton > button[title="Important emails (is:important)"],
+    .stButton > button[title="Today's emails (newer_than:1d)"],
+    .stButton > button[title="Primary category (category:primary)"] {
+        position: relative !important;
+    }
+
+    /* Hide default browser tooltips for filter buttons */
+    .stButton > button[title="Unread emails (is:unread)"],
+    .stButton > button[title="Starred emails (is:starred)"],
+    .stButton > button[title="Emails with attachments (has:attachment)"],
+    .stButton > button[title="Important emails (is:important)"],
+    .stButton > button[title="Today's emails (newer_than:1d)"],
+    .stButton > button[title="Primary category (category:primary)"] {
+        /* Disable default browser tooltips */
+        pointer-events: auto !important;
+    }
+
+    /* Completely disable default tooltips on these buttons */
+    .stButton > button[title="Unread emails (is:unread)"]:hover,
+    .stButton > button[title="Starred emails (is:starred)"]:hover,
+    .stButton > button[title="Emails with attachments (has:attachment)"]:hover,
+    .stButton > button[title="Important emails (is:important)"]:hover,
+    .stButton > button[title="Today's emails (newer_than:1d)"]:hover,
+    .stButton > button[title="Primary category (category:primary)"]:hover {
+        /* Hide default tooltips but keep our custom ones */
+        position: relative !important;
+    }
+
+    /* Create custom tooltips that appear well above the buttons with generous spacing */
+    .stButton > button[title="Unread emails (is:unread)"]:hover::after,
+    .stButton > button[title="Starred emails (is:starred)"]:hover::after,
+    .stButton > button[title="Emails with attachments (has:attachment)"]:hover::after,
+    .stButton > button[title="Important emails (is:important)"]:hover::after,
+    .stButton > button[title="Today's emails (newer_than:1d)"]:hover::after,
+    .stButton > button[title="Primary category (category:primary)"]:hover::after {
+        content: attr(title) !important;
+        position: absolute !important;
+        bottom: 180% !important; /* Position much higher above the button */
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        background-color: rgba(0, 0, 0, 0.95) !important;
+        color: white !important;
+        padding: 10px 14px !important;
+        border-radius: 8px !important;
+        font-size: 12px !important;
+        line-height: 1.3 !important;
+        white-space: nowrap !important;
+        z-index: 99999 !important; /* Ensure tooltips appear above everything */
+        font-weight: 500 !important;
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3) !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        animation: tooltipFadeIn 0.2s ease-in-out forwards !important;
+        margin-bottom: 10px !important; /* Additional spacing buffer */
+    }
+
+    /* Tooltip arrow pointing down to the button with increased spacing */
+    .stButton > button[title="Unread emails (is:unread)"]:hover::before,
+    .stButton > button[title="Starred emails (is:starred)"]:hover::before,
+    .stButton > button[title="Emails with attachments (has:attachment)"]:hover::before,
+    .stButton > button[title="Important emails (is:important)"]:hover::before,
+    .stButton > button[title="Today's emails (newer_than:1d)"]:hover::before,
+    .stButton > button[title="Primary category (category:primary)"]:hover::before {
+        content: "" !important;
+        position: absolute !important;
+        bottom: 160% !important; /* Position just below the tooltip with more spacing */
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        border-left: 6px solid transparent !important;
+        border-right: 6px solid transparent !important;
+        border-top: 6px solid rgba(0, 0, 0, 0.95) !important;
+        z-index: 10001 !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        animation: tooltipFadeIn 0.2s ease-in-out forwards !important;
+    }
+
+    /* Fade-in animation for tooltips */
+    @keyframes tooltipFadeIn {
+        from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(5px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
         }
     }
 
@@ -772,7 +931,7 @@ class EmailService:
             with open(self.approval_tokens_file, 'w', encoding='utf-8') as f:
                 json.dump(tokens, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"Error saving tokens: {e}")
+            exception_info(log, "Failed to save approval tokens")
     
     def generate_approval_token(self, user_id: str, email: str) -> str:
         """Generate a unique approval token for a user."""
@@ -872,18 +1031,18 @@ class EmailService:
             
             # Try to send actual email first, fall back to storing for demo
             if self.send_actual_email(subject, html_body):
-                print(f" Approval email sent successfully to {self.approver_email}")
+                log.info(f"Approval email sent successfully to {self.approver_email}")
                 # Also store for admin panel display
                 self.store_approval_email(user_email, user_id, html_body, approve_url, reject_url)
                 return True
             else:
-                print(f" Failed to send actual email, storing for demo purposes")
+                log.warning("Failed to send actual email, storing for demo purposes")
                 # Store for display in admin panel
                 self.store_approval_email(user_email, user_id, html_body, approve_url, reject_url)
                 return True  # Still return True so user gets feedback
             
         except Exception as e:
-            print(f"Error sending approval email: {e}")
+            exception_info(log, "Error sending approval email")
             return False
     
     def send_actual_email(self, subject: str, html_body: str) -> bool:
@@ -900,8 +1059,8 @@ class EmailService:
             smtp_password = os.getenv('SMTP_PASSWORD', os.getenv('APP_PASSWORD'))
             
             if not smtp_username or not smtp_password:
-                print(" SMTP credentials not found in environment variables")
-                print(" Set SMTP_USERNAME and SMTP_PASSWORD (or EMAIL_ADDRESS and APP_PASSWORD)")
+                log.warning("SMTP credentials not found in environment variables")
+                log.warning("Set SMTP_USERNAME and SMTP_PASSWORD (or EMAIL_ADDRESS and APP_PASSWORD)")
                 return False
             
             # Create message
@@ -923,7 +1082,7 @@ class EmailService:
             return True
             
         except Exception as e:
-            print(f" Failed to send email via SMTP: {e}")
+            log.error(f"Failed to send email via SMTP: {e}")
             return False
     
     def store_approval_email(self, user_email: str, user_id: str, html_body: str, approve_url: str, reject_url: str):
@@ -948,19 +1107,19 @@ class EmailService:
         try:
             # Check if primary user has OAuth2 authentication
             if not primary_user or not primary_user.get('user_id'):
-                print(" No primary user found for sending approval emails")
+                log.warning("No primary user found for sending approval emails")
                 return False
             
             # Get OAuth manager
             oauth_manager = st.session_state.get('oauth_manager')
             if not oauth_manager:
-                print(" OAuth manager not available")
+                log.warning("OAuth manager not available")
                 return False
             
             # Check if primary user is authenticated
             primary_user_id = primary_user['user_id']
             if not oauth_manager.is_authenticated(primary_user_id):
-                print(f" Primary user {primary_user['email']} is not authenticated with OAuth2")
+                log.warning(f"Primary user {primary_user['email']} is not authenticated with OAuth2")
                 return False
             
             # Generate approval URLs
@@ -1013,17 +1172,17 @@ class EmailService:
             
             # Try to send via OAuth2 Gmail API
             if self.send_email_via_oauth2(oauth_manager, primary_user_id, primary_user['email'], subject, html_body):
-                print(f" Approval email sent successfully via OAuth2 to {primary_user['email']}")
+                log.info(f"Approval email sent successfully via OAuth2 to {primary_user['email']}")
                 # Also store for admin panel display
                 self.store_approval_email(user_email, user_id, html_body, approve_url, reject_url)
                 return True
             else:
-                print(f" Failed to send via OAuth2, storing for admin panel")
+                log.warning("Failed to send via OAuth2, storing for admin panel")
                 self.store_approval_email(user_email, user_id, html_body, approve_url, reject_url)
                 return True  # Still return True so user gets feedback
             
         except Exception as e:
-            print(f"Error sending approval email with OAuth2: {e}")
+            exception_info(log, "Error sending approval email with OAuth2")
             return False
     
     def send_email_via_oauth2(self, oauth_manager, user_id: str, to_email: str, subject: str, html_body: str) -> bool:
@@ -1058,7 +1217,7 @@ class EmailService:
             return True
             
         except Exception as e:
-            print(f" Failed to send email via OAuth2 Gmail API: {e}")
+            log.error(f"Failed to send email via OAuth2 Gmail API: {e}")
             return False
 
 
@@ -1090,6 +1249,7 @@ class UserManager:
             with open(self.users_file, 'w', encoding='utf-8') as f:
                 json.dump(users, f, indent=2, ensure_ascii=False)
         except Exception as e:
+            exception_info(log, "Failed to save users")
             st.error(f"Error saving users: {e}")
     
     def register_user(self, email: str, google_id: str = "") -> bool:
@@ -1119,7 +1279,7 @@ class UserManager:
                 "last_login": None,
                 "is_primary": True
             }
-            print(f" Registered first user as primary owner: {email}")
+            log.info(f"Registered first user as primary owner: {email}")
         else:
             # Subsequent users need approval
             users[user_id] = {
@@ -1139,7 +1299,7 @@ class UserManager:
                 try:
                     self.email_service.send_approval_email_with_oauth(email, user_id, primary_user)
                 except Exception as e:
-                    print(f"Failed to send approval email: {e}")
+                    log.error(f"Failed to send approval email: {e}")
         
         self.save_users(users)
         
@@ -1148,9 +1308,9 @@ class UserManager:
             if hasattr(st.session_state, 'subscription_manager') and st.session_state.subscription_manager:
                 subscription_manager = st.session_state.subscription_manager
                 subscription_manager.create_user_subscription(user_id, email, PlanType.FREE)
-                print(f" Created free subscription for user: {email}")
+                log.info(f"Created free subscription for user: {email}")
         except Exception as e:
-            print(f" Failed to create subscription for user {email}: {e}")
+            log.error(f"Failed to create subscription for user {email}: {e}")
         
         return True
     
@@ -1174,7 +1334,7 @@ class UserManager:
             self.email_service.send_approval_email_with_oauth(email, user_id, primary_user)
             return True
         except Exception as e:
-            print(f"Failed to resend approval email: {e}")
+            log.error(f"Failed to resend approval email: {e}")
             return False
     
     def approve_user(self, user_id: str) -> bool:
@@ -1268,11 +1428,11 @@ class UserManager:
             if user_data['email'] == email:
                 user_data['role'] = 'admin'
                 users[user_id] = user_data
-                self.save_users(users)
-                print(f"✅ Made {email} an admin user")
-                return True
+            self.save_users(users)
+            log.info(f"Made {email} an admin user")
+            return True
         
-        print(f"❌ User {email} not found")
+        log.warning(f"User {email} not found")
         return False
     
     def initialize_admin_user(self, email: str) -> bool:
@@ -1299,7 +1459,7 @@ class UserManager:
             }
             
             self.save_users(users)
-            print(f"✅ Created and made {email} an admin user")
+            log.info(f"Created and made {email} an admin user")
             return True
     
     def has_primary_user(self) -> bool:
@@ -1332,11 +1492,11 @@ def check_persistent_session():
         
         # Enhanced debug output
         if browser_session_token:
-            print(f"✅ Persistent session token found (length: {len(browser_session_token)})")
+            log.debug(f"Persistent session token found (length: {len(browser_session_token)})")
             
             # Validate the session
             user_id = session_manager.validate_session(browser_session_token)
-            print(f"🔍 Session validation result: user_id={user_id}")
+            log.debug(f"Session validation result: user_id={user_id}")
             
             if user_id:
                 # Check if user still exists and is approved
@@ -1344,7 +1504,7 @@ def check_persistent_session():
                 users = user_manager.load_users()
                 
                 if user_id in users and users[user_id].get('status') == 'approved':
-                    print(f"🎉 User {user_id} found and approved, restoring session...")
+                    log.info(f"User {user_id} found and approved, restoring session")
                     
                     # Restore session state completely
                     st.session_state.authenticated_user_id = user_id
@@ -1356,17 +1516,25 @@ def check_persistent_session():
                     # Find OAuth user_id by matching email
                     user_email = users[user_id].get('email', '')
                     oauth_user_id = None
-                    for oid, email in authenticated_users.items():
-                        if email == user_email:
-                            oauth_user_id = oid
-                            break
+                    
+                    # Try to find a valid OAuth token for this user's email
+                    try:
+                        for oid, email in authenticated_users.items():
+                            if email == user_email:
+                                # Verify this OAuth user_id actually has valid credentials
+                                if oauth_manager.is_authenticated(oid):
+                                    oauth_user_id = oid
+                                    break
+                    except Exception as e:
+                        log.debug(f"Error checking OAuth tokens: {e}")
                     
                     if oauth_user_id:
                         st.session_state.current_user = oauth_user_id
                         st.session_state.authentication_step = 'dashboard'
+                        log.debug(f"Restored OAuth session for user {user_email} with token {oauth_user_id}")
                     else:
                         # No valid OAuth token found, user needs to re-authenticate
-                        print(f"❌ No OAuth token found for user {user_email}, clearing session")
+                        log.warning(f"No valid OAuth token found for user {user_email}, clearing session")
                         session_manager.invalidate_session(browser_session_token)
                         session_manager.clear_browser_session()
                         st.session_state.authentication_step = 'login'
@@ -1380,29 +1548,27 @@ def check_persistent_session():
                     # Update last login time
                     user_manager.update_last_login(user_id)
                     
-                    print(f"✨ Session successfully restored for user: {user_id}")
+                    log.info(f"Session successfully restored for user: {user_id}")
                     return True
                 else:
-                    print(f"❌ User {user_id} not found or not approved, clearing session")
+                    log.warning(f"User {user_id} not found or not approved, clearing session")
                     # User no longer exists or not approved, clear session
                     session_manager.invalidate_session(browser_session_token)
                     session_manager.clear_browser_session()
             else:
-                print("❌ Invalid session token, clearing browser session")
+                log.warning("Invalid session token, clearing browser session")
                 # Invalid session, clear browser storage
                 session_manager.clear_browser_session()
         else:
-            print("ℹ️ No persistent session token found")
+            log.debug("No persistent session token found")
         
         # No valid session found, ensure we're in login state
         if st.session_state.get('authentication_step') != 'login':
-            print("🔄 Setting authentication step to login")
+            log.debug("Setting authentication step to login")
             st.session_state.authentication_step = 'login'
         
     except Exception as e:
-        print(f"💥 Error checking persistent session: {e}")
-        import traceback
-        traceback.print_exc()
+        exception_info(log, "Error checking persistent session")
         # On error, ensure we're in login state
         st.session_state.authentication_step = 'login'
     
@@ -2132,8 +2298,36 @@ def show_dashboard():
         user_data = user_manager.get_user_by_id(user_id)
         is_admin = user_manager.is_admin(user_id)
     except Exception as e:
-        st.error(f"Error loading user information: {e}")
-        return
+        # Check if this is an OAuth credentials issue
+        if "No valid credentials found" in str(e):
+            st.error("🔑 Your authentication session has expired. Please log in again.")
+            st.info("Click the 'Logout' button and then log in with your Gmail account to restore access.")
+            
+            # Clear the invalid OAuth credentials
+            try:
+                oauth_manager.revoke_credentials(oauth_user_id)
+                log.info(f"Cleared invalid OAuth credentials for user: {oauth_user_id}")
+            except Exception as revoke_error:
+                log.warning(f"Could not revoke invalid credentials: {revoke_error}")
+            
+            # Clear the invalid session
+            browser_token = session_manager.get_browser_session()
+            if browser_token:
+                session_manager.invalidate_session(browser_token)
+            session_manager.clear_browser_session()
+            
+            # Reset to login state
+            st.session_state.current_user = None
+            st.session_state.authenticated_user_id = None
+            st.session_state.authentication_step = 'login'
+            
+            # Add a rerun to immediately show login page
+            if st.button("🔄 Go to Login"):
+                st.rerun()
+            return
+        else:
+            st.error(f"Error loading user information: {e}")
+            return
     
     # Header with user info and logout
     col1, col2, col3 = st.columns([2, 2, 1])
@@ -2167,53 +2361,229 @@ def show_dashboard():
     
     # Create tabs - admin tab only visible to admin users
     if is_admin:
-        tab_names = ["📧 Email Processing", "📊 Reports", "💳 Billing", "⚙️ Settings", "👑 Admin Panel"]
+        tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "💳 Billing", "⚙️ Settings", "👑 Admin Panel"]
         tabs = st.tabs(tab_names)
     else:
-        tab_names = ["📧 Email Processing", "📊 Reports", "💳 Billing", "⚙️ Settings"]
+        tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "💳 Billing", "⚙️ Settings"]
         tabs = st.tabs(tab_names)
     
     # Email Processing Tab
     with tabs[0]:
         show_email_processing_tab(user_id, oauth_manager)
     
-    # Reports Tab
+    # Rules Tab
     with tabs[1]:
+        show_rules_tab(user_id, oauth_manager)
+    
+    # Reports Tab
+    with tabs[2]:
         show_reports_tab(user_id, oauth_manager)
     
     # Billing Tab
-    with tabs[2]:
+    with tabs[3]:
         if st.session_state.subscription_manager and st.session_state.usage_tracker:
             show_billing_tab(st.session_state.subscription_manager, st.session_state.usage_tracker, user_id)
         else:
             st.warning("💳 Billing system not configured. Please add Stripe configuration to your .env file.")
     
     # Settings Tab
-    with tabs[3]:
+    with tabs[4]:
         show_settings_tab(user_id, oauth_manager)
     
     # Admin Panel Tab (only for admin users)
     if is_admin:
-        with tabs[4]:
+        with tabs[5]:
             show_admin_panel_tab(user_id, oauth_manager)
 
 
-def show_email_processing_tab(user_id: str, oauth_manager):
-    """Show the email processing interface."""
-    st.markdown("## 📧 Email Processing")
-    st.markdown("Configure filters and process your emails with AI")
+# Removed duplicate function - using the main implementation below
+
+
+def show_rules_tab(user_id: str, oauth_manager):
+    """Show AI email processing rules management."""
+    st.markdown("## 📋 AI Processing Rules")
+    st.markdown("*Configure how AI should handle your emails*")
+    st.markdown("---")
     
-    # Email filters section (existing functionality)
-    show_email_filters_section()
+    # Rule creation section
+    st.markdown("### ➕ Create New Rule")
     
-    # Email rules section (existing functionality) 
-    show_email_rules_section()
+    with st.container():
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.markdown("**Gmail Search Filter**")
+            rule_filter = st.text_input(
+                "Filter Condition", 
+                placeholder="e.g., from:client.com OR subject:urgent",
+                help="Use Gmail search syntax to match emails. Examples: from:sender.com, subject:urgent, is:unread AND has:attachment",
+                label_visibility="collapsed"
+            )
+            
+            # Quick filter examples
+            st.markdown("**Quick Examples:**")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("📧 From Domain", help="Emails from specific domain"):
+                    st.session_state.temp_filter = "from:company.com"
+                if st.button("📝 Subject Contains", help="Subject contains specific text"):
+                    st.session_state.temp_filter = "subject:urgent"
+            with col_b:
+                if st.button("🔴 High Priority", help="Important emails"):
+                    st.session_state.temp_filter = "is:important"
+                if st.button("📎 Has Attachment", help="Emails with attachments"):
+                    st.session_state.temp_filter = "has:attachment"
+        
+        with col2:
+            st.markdown("**AI Action Instructions**")
+            rule_action = st.text_area(
+                "AI Instructions",
+                placeholder="e.g., Reply with acknowledgment, mark as high priority, and create calendar reminder",
+                help="Tell the AI exactly how to handle emails matching this filter. Be specific about desired outcomes.",
+                height=120,
+                label_visibility="collapsed"
+            )
+            
+            # AI action examples
+            st.markdown("**Action Examples:**")
+            action_examples = [
+                "Reply with: 'Thank you for your message. I will review and respond within 24 hours.'",
+                "Mark as high priority and add label 'Client Work'",
+                "Archive email and create summary note",
+                "Forward to assistant@company.com with context",
+                "Schedule follow-up reminder for tomorrow"
+            ]
+            
+            selected_example = st.selectbox(
+                "Use Example:",
+                options=[""] + action_examples,
+                label_visibility="collapsed"
+            )
+            
+            if selected_example:
+                st.session_state.temp_action = selected_example
     
-    # Processing controls
-    show_processing_controls(user_id, oauth_manager)
+    # Use temporary values if set
+    if st.session_state.get('temp_filter'):
+        rule_filter = st.session_state.temp_filter
+        del st.session_state.temp_filter
+    if st.session_state.get('temp_action'):
+        rule_action = st.session_state.temp_action
+        del st.session_state.temp_action
     
-    # Activity window
-    show_activity_window()
+    # Add rule button
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col2:
+        if st.button("➕ Add Rule", type="primary", use_container_width=True):
+            if rule_filter and rule_action:
+                if 'email_rules' not in st.session_state:
+                    st.session_state.email_rules = []
+                
+                st.session_state.email_rules.append({
+                    'filter': rule_filter,
+                    'action': rule_action,
+                    'created': datetime.now().isoformat(),
+                    'enabled': True
+                })
+                st.success("✅ Rule added successfully!")
+                st.rerun()
+            else:
+                st.error("❌ Please fill in both filter and action fields.")
+    
+    st.markdown("---")
+    
+    # Display existing rules
+    st.markdown("### 📚 Active Rules")
+    
+    if st.session_state.get('email_rules'):
+        for i, rule in enumerate(st.session_state.email_rules):
+            with st.expander(f"📋 Rule {i+1}: {rule['filter'][:50]}{'...' if len(rule['filter']) > 50 else ''}", expanded=False):
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.markdown("**Filter Condition:**")
+                    st.code(rule['filter'], language=None)
+                    
+                    st.markdown("**AI Action:**")
+                    st.text_area(
+                        "Action",
+                        value=rule['action'],
+                        height=100,
+                        disabled=True,
+                        key=f"action_display_{i}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    st.caption(f"Created: {rule['created'][:16]}")
+                
+                with col2:
+                    st.markdown("**Controls:**")
+                    
+                    # Enable/Disable toggle
+                    enabled = st.checkbox(
+                        "Enabled",
+                        value=rule.get('enabled', True),
+                        key=f"enabled_{i}"
+                    )
+                    
+                    if enabled != rule.get('enabled', True):
+                        st.session_state.email_rules[i]['enabled'] = enabled
+                        st.rerun()
+                    
+                    # Delete button
+                    if st.button("🗑️ Delete", key=f"delete_rule_{i}", type="secondary", use_container_width=True):
+                        st.session_state.email_rules.pop(i)
+                        st.success("Rule deleted!")
+                        st.rerun()
+                    
+                    # Test button
+                    if st.button("🧪 Test", key=f"test_rule_{i}", use_container_width=True):
+                        st.info("Rule testing functionality coming soon!")
+        
+        # Rules summary
+        total_rules = len(st.session_state.email_rules)
+        enabled_rules = len([r for r in st.session_state.email_rules if r.get('enabled', True)])
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Rules", total_rules)
+        with col2:
+            st.metric("Active Rules", enabled_rules)
+        with col3:
+            st.metric("Disabled Rules", total_rules - enabled_rules)
+        
+        # Clear all rules
+        st.markdown("---")
+        if st.button("🗑️ Clear All Rules", type="secondary"):
+            if st.session_state.get('confirm_clear_rules'):
+                st.session_state.email_rules = []
+                st.session_state.confirm_clear_rules = False
+                st.success("All rules cleared!")
+                st.rerun()
+            else:
+                st.session_state.confirm_clear_rules = True
+                st.warning("Click again to confirm clearing all rules.")
+    else:
+        st.info("📝 **No rules defined yet**")
+        st.markdown("""
+        **Getting Started:**
+        1. Create your first rule using the form above
+        2. Use Gmail search syntax for precise email matching
+        3. Provide clear AI instructions for desired actions
+        4. Rules will be applied during email processing
+        """)
+        
+        # Sample rules
+        st.markdown("**Sample Rule Ideas:**")
+        sample_rules = [
+            {"filter": "from:newsletter", "action": "Archive automatically and mark as read"},
+            {"filter": "subject:invoice", "action": "Forward to accounting@company.com and add 'Finance' label"},
+            {"filter": "is:important from:boss", "action": "Reply with acknowledgment and set high priority"},
+            {"filter": "has:attachment subject:contract", "action": "Save attachment to contracts folder and notify legal team"}
+        ]
+        
+        for sample in sample_rules:
+            st.markdown(f"• **Filter:** `{sample['filter']}` → **Action:** {sample['action']}")
 
 
 def show_reports_tab(user_id: str, oauth_manager):
@@ -2362,56 +2732,10 @@ def show_admin_panel_tab(user_id: str, oauth_manager):
     show_error_logs_tab(user_id, oauth_manager)
 
 
-def show_email_filters_section():
-    """Show email filters configuration."""
-    st.markdown("### 🔍 Email Filters")
-    # Add existing filter implementation here
-    pass
+# Removed placeholder functions - all functionality is in the main email processing tab implementation
 
 
-def show_email_rules_section():
-    """Show email rules configuration."""
-    st.markdown("### 📋 Email Rules")
-    # Add existing rules implementation here
-    pass
-
-
-def show_processing_controls(user_id: str, oauth_manager):
-    """Show processing controls."""
-    st.markdown("### ▶️ Processing Controls")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🚀 Start Processing", type="primary"):
-            st.session_state.processing_active = True
-            process_emails_with_filters(user_id, oauth_manager)
-    
-    with col2:
-        if st.button("⏹️ Stop Processing"):
-            st.session_state.processing_active = False
-            st.session_state.processing_stopped = True
-
-
-def show_activity_window():
-    """Show activity window with real-time logs."""
-    st.markdown("### 📺 Activity Window")
-    
-    if st.session_state.get('activity_logs'):
-        logs_content = "\n".join(st.session_state.activity_logs[-50:])  # Show last 50 logs
-        st.text_area(
-            "Processing Activity:",
-            value=logs_content,
-            height=250,
-            key="activity_display",
-            help="Real-time activity from AI email processing"
-        )
-        
-        if st.button("🗑️ Clear Activity"):
-            st.session_state.activity_logs = []
-            st.rerun()
-    else:
-        st.info("No activity yet. Start email processing to see real-time updates.")
+# Removed standalone activity window function - using inline implementation in main tab
 
 
 def init_session_state():
@@ -2434,6 +2758,10 @@ def init_session_state():
 
 def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     """Show email processing interface."""
+    
+    st.markdown("## 📧 Email Processing")
+    st.markdown("*Configure filters and process your emails with AI*")
+    st.markdown("---")
     
     # Stats overview - only show when not processing to avoid duplication
     if not st.session_state.get('processing_active', False):
@@ -2520,6 +2848,7 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     if 'gmail_search' not in st.session_state:
         st.session_state.gmail_search = 'is:unread'
     
+    st.markdown("### 🔍 Email Filters & Search")
     # Single row layout: Quick Filters + Search + Max Emails + Processing Controls
     col1, col2, col3, col4, col5, col6, col7, col8, col9, col10 = st.columns([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 3, 0.8, 0.8, 0.8])
     
@@ -2598,9 +2927,11 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
         else:
             st.button(" Stop", disabled=True, help="Stop email processing", key="stop_disabled")
     
-    # Activity Window - Always visible
+
+    # Activity Window - Always visible  
     st.markdown("---")
-    st.markdown("###  Activity Window")
+    st.markdown("### 📺 Activity Window")
+    st.markdown("*Real-time AI processing updates*")
     
     # Initialize activity window state
     if 'activity_logs' not in st.session_state:
@@ -3602,11 +3933,13 @@ class GmailSearchParser:
 
 
 class ErrorLogger:
-    """Manages error logging with 30-day retention."""
+    """Manages error logging with daily rotation and 30-day retention."""
     
     def __init__(self):
         self.error_log_file = "error_logs.json"
+        self.logger = log  # Use centralized logger instead of print calls
         self.ensure_error_log_file()
+        self._perform_daily_maintenance()
     
     def ensure_error_log_file(self):
         """Ensure error log file exists."""
@@ -3618,7 +3951,8 @@ class ErrorLogger:
         try:
             with open(self.error_log_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception:
+        except Exception as e:
+            self.logger.warning(f"Failed to load errors from {self.error_log_file}: {e}")
             return []
     
     def save_errors(self, errors: List[Dict]):
@@ -3627,59 +3961,153 @@ class ErrorLogger:
             with open(self.error_log_file, 'w', encoding='utf-8') as f:
                 json.dump(errors, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"Error saving error logs: {e}")
+            self.logger.error(f"Error saving error logs: {e}")
+    
+    def _perform_daily_maintenance(self):
+        """Perform daily maintenance including rotation and cleanup."""
+        try:
+            # Check if we need to rotate logs (daily)
+            self._rotate_logs_if_needed()
+            # Clean up old errors
+            self.cleanup_old_errors()
+        except Exception as e:
+            self.logger.error(f"Error during daily maintenance: {e}")
+    
+    def _rotate_logs_if_needed(self):
+        """Rotate logs daily by moving current log to dated file."""
+        if not os.path.exists(self.error_log_file):
+            return
+        
+        try:
+            # Get file modification time
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(self.error_log_file))
+            current_date = datetime.now().date()
+            file_date = file_mtime.date()
+            
+            # If the file is from a previous day, rotate it
+            if file_date < current_date:
+                dated_filename = f"error_logs_{file_date.strftime('%Y%m%d')}.json"
+                
+                # Only rotate if the dated file doesn't already exist
+                if not os.path.exists(dated_filename):
+                    try:
+                        os.rename(self.error_log_file, dated_filename)
+                        self.logger.info(f"Rotated error logs to {dated_filename}")
+                        # Create new empty log file
+                        self.save_errors([])
+                    except OSError as e:
+                        self.logger.warning(f"Failed to rotate error logs: {e}")
+        except Exception as e:
+            self.logger.error(f"Error during log rotation: {e}")
     
     def cleanup_old_errors(self):
-        """Remove errors older than 30 days."""
-        errors = self.load_errors()
-        cutoff_date = datetime.now() - pd.Timedelta(days=30)
-        
-        filtered_errors = []
-        for error in errors:
-            try:
-                error_date = datetime.fromisoformat(error.get('timestamp', ''))
-                if error_date >= cutoff_date:
+        """Remove errors older than 30 days and clean up old rotated files."""
+        try:
+            # Clean up current error log
+            errors = self.load_errors()
+            cutoff_date = datetime.now() - pd.Timedelta(days=30)
+            
+            filtered_errors = []
+            for error in errors:
+                try:
+                    error_date = datetime.fromisoformat(error.get('timestamp', ''))
+                    if error_date >= cutoff_date:
+                        filtered_errors.append(error)
+                except:
+                    # Keep errors with invalid timestamps for safety
                     filtered_errors.append(error)
-            except:
-                # Keep errors with invalid timestamps for safety
-                filtered_errors.append(error)
-        
-        if len(filtered_errors) != len(errors):
-            self.save_errors(filtered_errors)
-            return len(errors) - len(filtered_errors)
-        return 0
+            
+            cleaned_count = 0
+            if len(filtered_errors) != len(errors):
+                self.save_errors(filtered_errors)
+                cleaned_count = len(errors) - len(filtered_errors)
+                if cleaned_count > 0:
+                    self.logger.info(f"Cleaned up {cleaned_count} old errors from current log")
+            
+            # Clean up old rotated log files (older than 30 days)
+            import glob
+            pattern = "error_logs_????????.json"  # Match YYYYMMDD format
+            old_files_removed = 0
+            
+            for old_file in glob.glob(pattern):
+                try:
+                    # Extract date from filename
+                    date_str = old_file.replace('error_logs_', '').replace('.json', '')
+                    file_date = datetime.strptime(date_str, '%Y%m%d')
+                    
+                    if datetime.now() - file_date > pd.Timedelta(days=30):
+                        os.remove(old_file)
+                        old_files_removed += 1
+                        self.logger.info(f"Removed old rotated error log: {old_file}")
+                except (ValueError, OSError) as e:
+                    self.logger.warning(f"Failed to process old log file {old_file}: {e}")
+            
+            return cleaned_count + old_files_removed
+            
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {e}")
+            return 0
     
     def log_error(self, error_type: str, message: str, details: str = "", user_id: str = ""):
-        """Log a new error."""
-        errors = self.load_errors()
-        
-        new_error = {
-            "id": str(uuid.uuid4()),
-            "timestamp": datetime.now().isoformat(),
-            "type": error_type,
-            "message": message,
-            "details": details,
-            "user_id": user_id,
-            "resolved": False
-        }
-        
-        errors.insert(0, new_error)  # Add to beginning for newest first
-        self.save_errors(errors)
+        """Log a new error to both structured storage and centralized logger."""
+        try:
+            # Log to centralized logger first
+            log_message = f"[{error_type}] {message}"
+            if user_id:
+                log_message += f" (User: {user_id})"
+            
+            self.logger.error(log_message)
+            if details:
+                self.logger.error(f"Details: {details}")
+            
+            # Save to structured error storage
+            errors = self.load_errors()
+            
+            new_error = {
+                "id": str(uuid.uuid4()),
+                "timestamp": datetime.now().isoformat(),
+                "type": error_type,
+                "message": message,
+                "details": details,
+                "user_id": user_id,
+                "resolved": False
+            }
+            
+            errors.insert(0, new_error)  # Add to beginning for newest first
+            self.save_errors(errors)
+            
+        except Exception as e:
+            # Fallback to basic logging if structured logging fails
+            self.logger.error(f"Failed to log structured error, fallback: [{error_type}] {message}")
+            self.logger.error(f"ErrorLogger failure details: {e}")
     
     def mark_resolved(self, error_id: str):
         """Mark an error as resolved."""
-        errors = self.load_errors()
-        for error in errors:
-            if error.get('id') == error_id:
-                error['resolved'] = True
-                break
-        self.save_errors(errors)
+        try:
+            errors = self.load_errors()
+            for error in errors:
+                if error.get('id') == error_id:
+                    error['resolved'] = True
+                    self.logger.info(f"Marked error {error_id} as resolved")
+                    break
+            self.save_errors(errors)
+        except Exception as e:
+            self.logger.error(f"Failed to mark error {error_id} as resolved: {e}")
     
     def delete_error(self, error_id: str):
         """Delete a specific error."""
-        errors = self.load_errors()
-        errors = [e for e in errors if e.get('id') != error_id]
-        self.save_errors(errors)
+        try:
+            errors = self.load_errors()
+            original_count = len(errors)
+            errors = [e for e in errors if e.get('id') != error_id]
+            
+            if len(errors) < original_count:
+                self.save_errors(errors)
+                self.logger.info(f"Deleted error {error_id}")
+            else:
+                self.logger.warning(f"Error {error_id} not found for deletion")
+        except Exception as e:
+            self.logger.error(f"Failed to delete error {error_id}: {e}")
 
 
 def show_error_logs_tab(user_id: str, oauth_manager: OAuth2Manager):
@@ -4129,10 +4557,38 @@ def log_to_activity_window(message):
         st.session_state.processing_logs = st.session_state.processing_logs[-100:]
 
 
+def check_and_fix_oauth_credentials(user_id: str, oauth_manager) -> bool:
+    """Check OAuth credentials and fix if invalid."""
+    try:
+        # Test if credentials work by attempting to get user email
+        oauth_manager.get_user_email(user_id)
+        return True
+    except Exception as e:
+        if "No valid credentials found" in str(e):
+            st.error(f"🔑 OAuth credentials invalid for user {user_id}. Clearing...")
+            try:
+                oauth_manager.revoke_credentials(user_id)
+                st.success("✅ Invalid credentials cleared. Please re-authenticate.")
+                return False
+            except Exception as revoke_error:
+                st.warning(f"Could not clear credentials: {revoke_error}")
+                return False
+        else:
+            st.error(f"OAuth error: {e}")
+            return False
+
 def process_emails_with_filters(user_id: str, oauth_manager):
     """Process emails using CrewAI with applied filters."""
     # Initialize error logger
     error_logger = ErrorLogger()
+    
+    # Check OAuth credentials first
+    if not check_and_fix_oauth_credentials(user_id, oauth_manager):
+        st.error("❌ OAuth authentication required. Please log in again to continue.")
+        if st.button("🔐 Go to Login"):
+            st.session_state.authentication_step = 'login'
+            st.rerun()
+        return
     
     # Check if processing was stopped before starting
     if st.session_state.get('processing_stopped', False):
@@ -4244,7 +4700,7 @@ def process_emails_with_filters(user_id: str, oauth_manager):
         
         st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 AI crew initialized, starting processing...")
         
-        # Run the crew with enhanced logging
+        # Run the crew with enhanced logging and output capture
         try:
             st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⚡ Starting AI crew execution...")
             st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🧠 Initializing AI agents: Categorizer, Organizer, Response Generator, Cleaner")
@@ -4255,10 +4711,87 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             with progress_placeholder:
                 st.info(" AI crew is processing your emails... Check the activity window below for real-time updates.")
             
-            result = crew.crew().kickoff()
+            # Capture CrewAI output and display in activity window
+            import sys
+            from io import StringIO
+            import contextlib
+            
+            # Create a custom output capturer
+            class ActivityLogCapture(StringIO):
+                def __init__(self):
+                    super().__init__()
+                    self.content = []
+                    
+                def write(self, text):
+                    if text.strip():  # Only capture non-empty lines
+                        # Format and add to activity logs
+                        formatted_text = self._format_crew_output(text.strip())
+                        if formatted_text:
+                            timestamp = datetime.now().strftime('%H:%M:%S')
+                            st.session_state.activity_logs.append(f"[{timestamp}] {formatted_text}")
+                            self.content.append(text.strip())
+                    return len(text)
+                    
+                def _format_crew_output(self, text):
+                    """Format CrewAI output for better readability in activity window."""
+                    # Skip LiteLLM debug messages and other noise
+                    skip_patterns = [
+                        "LiteLLM:",
+                        "INFO LiteLLM:",
+                        "DEBUG:",
+                        "Using Gmail search query:",
+                        "Fetched and sorted",
+                        "Error fetching emails with OAuth2",
+                        "utils.py:",
+                        "__pycache__"
+                    ]
+                    
+                    for pattern in skip_patterns:
+                        if pattern in text:
+                            return None
+                    
+                    # Format different types of CrewAI messages
+                    if "🚀 Crew:" in text:
+                        return f"🤖 {text}"
+                    elif "📋 Task:" in text or "Task:" in text:
+                        return f"📋 {text}"
+                    elif "Agent:" in text:
+                        return f"👤 {text}"
+                    elif "🔧 Used" in text:
+                        return f"🔧 {text}"
+                    elif "✅ Completed" in text or "Status: ✅ Completed" in text:
+                        return f"✅ {text}"
+                    elif "Tool Execution" in text:
+                        return f"🛠️ {text}"
+                    elif "Final Answer" in text:
+                        return f"💡 {text}"
+                    elif "Using Tool:" in text:
+                        return f"🔧 {text}"
+                    elif "Successfully" in text:
+                        return f"✅ {text}"
+                    elif "Error" in text and len(text) < 100:  # Only short error messages
+                        return f"❌ {text}"
+                    elif text.startswith("🚀") or text.startswith("📧") or text.startswith("✅"):
+                        return text  # Already formatted
+                    else:
+                        # For other messages, add a generic icon if they seem important
+                        if len(text) > 10 and any(word in text.lower() for word in ['processing', 'analyzing', 'generating', 'organizing']):
+                            return f"⚡ {text}"
+                    
+                    return None
+            
+            # Set up output capture
+            activity_capture = ActivityLogCapture()
+            
+            # Redirect stdout to capture CrewAI output
+            with contextlib.redirect_stdout(activity_capture):
+                result = crew.crew().kickoff()
             
             # Clear progress indicator
             progress_placeholder.empty()
+            
+            # Add final completion message
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 CrewAI execution completed - captured {len(activity_capture.content)} output lines")
             
             # Check if processing was stopped during execution
             if st.session_state.get('processing_stopped', False):

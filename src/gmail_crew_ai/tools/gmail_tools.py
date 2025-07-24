@@ -190,11 +190,10 @@ class GetUnreadEmailsTool(GmailToolBase):
                 print("DEBUG: No unread emails found.")
                 return []
             
-            email_ids = list(reversed(email_ids))
-            email_ids = email_ids[:limit]
-            print(f"DEBUG: Processing {len(email_ids)} emails")
+            # Process all emails first to get their dates for sorting
+            print(f"DEBUG: Processing {len(email_ids)} emails for chronological sorting")
             
-            emails = []
+            emails_with_dates = []
             for i, email_id in enumerate(email_ids):
                 print(f"DEBUG: Processing email {i+1}/{len(email_ids)}")
                 result, msg_data = mail.fetch(email_id, "(RFC822)")
@@ -252,9 +251,31 @@ class GetUnreadEmailsTool(GmailToolBase):
                 # Print the structure of what we're appending
                 print(f"DEBUG: Email tuple structure: subject={subject}, sender={sender}, body_length={len(full_body)}, email_id={email_id.decode('utf-8')}, thread_info_keys={thread_info.keys()}")
                 
-                emails.append((subject, sender, full_body, email_id.decode('utf-8'), thread_info))
+                email_tuple = (subject, sender, full_body, email_id.decode('utf-8'), thread_info)
+                
+                # Parse date for sorting
+                try:
+                    from email.utils import parsedate_to_datetime
+                    if date_str:
+                        parsed_date = parsedate_to_datetime(date_str)
+                        sort_timestamp = parsed_date.timestamp()
+                    else:
+                        sort_timestamp = 0
+                except Exception:
+                    sort_timestamp = 0
+                
+                emails_with_dates.append((email_tuple, sort_timestamp))
             
-            print(f"DEBUG: Returning {len(emails)} email tuples")
+            # Sort by timestamp in descending order (newest first)
+            emails_with_dates.sort(key=lambda x: x[1], reverse=True)
+            
+            # Apply limit after sorting to ensure we get the newest emails
+            emails_with_dates = emails_with_dates[:limit]
+            
+            # Extract just the email data (without the timestamp)
+            emails = [email_tuple for email_tuple, _ in emails_with_dates]
+            
+            print(f"DEBUG: Returning {len(emails)} email tuples in chronological descending order")
             return emails
         except Exception as e:
             print(f"DEBUG: Exception in GetUnreadEmailsTool: {e}")
