@@ -1,0 +1,42 @@
+🤖 CrewAI Control Panel
+Agent Status
+
+🔧 Gateway
+
+🔧 Governance
+
+🔧 Strapi Analysis
+
+🔧 Content Strategy
+
+🔧 Frontend Builder
+
+🔧 Api Integration
+
+🔧 Performance Monitor
+
+🔧 Security Maintenance
+
+Quick Workflows
+
+🚀 Content Deployment
+
+🎨 Frontend Generation
+
+🔧 System Maintenance
+
+Configuration
+
+Strapi Instance Settings
+
+Recent Executions
+
+🗑️ Clear Chat
+
+Deploy
+💬 CrewAI Chat Interface
+
+Ask questions or request tasks from your CrewAI agents. Use the sidebar to select workflows or configure settings.
+
+🤖 CrewAI Strapi CMS Manager | Built with Streamlit
+Use the sidebar to configure settings and start workflows

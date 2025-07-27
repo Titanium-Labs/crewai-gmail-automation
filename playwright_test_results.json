@@ -1,0 +1,180 @@
+{
+  "errors": [],
+  "warnings": [
+    {
+      "type": "WARNING",
+      "message": "No login indicators found - app may not be on login page",
+      "timestamp": 1753400773.2272348,
+      "details": null
+    },
+    {
+      "type": "WARNING",
+      "message": "Error testing button 0: ElementHandle.click: Timeout 30000ms exceeded.\nCall log:\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    57 \u00d7 waiting for element to be visible, enabled and stable\n       - element is not visible\n     - retrying click action\n       - waiting 500ms\n",
+      "timestamp": 1753400803.2620084,
+      "details": null
+    },
+    {
+      "type": "WARNING",
+      "message": "Error testing input 0: ElementHandle.fill: Timeout 30000ms exceeded.\nCall log:\n    - fill(\"test input\")\n  - attempting fill action\n    2 \u00d7 waiting for element to be visible, enabled and editable\n      - element is not visible\n    - retrying fill action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and editable\n      - element is not visible\n    - retrying fill action\n      - waiting 100ms\n    58 \u00d7 waiting for element to be visible, enabled and editable\n       - element is not visible\n     - retrying fill action\n       - waiting 500ms\n",
+      "timestamp": 1753400835.3514965,
+      "details": null
+    }
+  ],
+  "info": [
+    {
+      "type": "INFO",
+      "message": "Starting Playwright browser tests...",
+      "timestamp": 1753400765.9573033,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Navigating to http://localhost:8501",
+      "timestamp": 1753400766.4042702,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "App container loaded successfully",
+      "timestamp": 1753400766.9065595,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Screenshot saved: initial_screenshot.png",
+      "timestamp": 1753400769.9781747,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Checking console for JavaScript errors...",
+      "timestamp": 1753400769.9781747,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing login page...",
+      "timestamp": 1753400773.203937,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Found UI elements: [('button', 9), ('h1', 2), ('.login-container', 0)]",
+      "timestamp": 1753400773.223722,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing navigation and buttons...",
+      "timestamp": 1753400773.235398,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Found 9 buttons on page",
+      "timestamp": 1753400773.2389157,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing button: keyboard_double_arrow_left",
+      "timestamp": 1753400773.2454336,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing button: \ud83d\ude80 Content Deployment",
+      "timestamp": 1753400803.2660222,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing button: \ud83c\udfa8 Frontend Generation",
+      "timestamp": 1753400804.3056147,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing form inputs...",
+      "timestamp": 1753400805.3338244,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Found 2 text inputs",
+      "timestamp": 1753400805.338828,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing input 0: type=text, placeholder=''",
+      "timestamp": 1753400805.3423345,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing input 1: type=textarea, placeholder='Ask your CrewAI agents anything...'",
+      "timestamp": 1753400835.3572094,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Input 1 accepts text correctly",
+      "timestamp": 1753400835.3675566,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing app responsiveness...",
+      "timestamp": 1753400835.3740628,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing Desktop viewport (1920x1080)",
+      "timestamp": 1753400835.3740628,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Desktop viewport: App container visible",
+      "timestamp": 1753400836.3906684,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing Tablet viewport (768x1024)",
+      "timestamp": 1753400836.391194,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Tablet viewport: App container visible",
+      "timestamp": 1753400837.400942,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Testing Mobile viewport (375x667)",
+      "timestamp": 1753400837.400942,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Mobile viewport: App container visible",
+      "timestamp": 1753400838.4114718,
+      "details": null
+    },
+    {
+      "type": "INFO",
+      "message": "Screenshot saved: final_screenshot.png",
+      "timestamp": 1753400838.5084963,
+      "details": null
+    }
+  ],
+  "summary": {
+    "total_errors": 0,
+    "total_warnings": 3,
+    "total_info": 25
+  }
+}
