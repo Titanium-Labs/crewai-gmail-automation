@@ -11,8 +11,20 @@ Provides centralized logging configuration with:
 import logging
 import os
 import sys
+import platform
 from logging.handlers import TimedRotatingFileHandler
 from typing import Optional
+
+# Import Windows-safe handler if on Windows
+if platform.system() == 'Windows':
+    try:
+        from .windows_safe_handler import WindowsSafeTimedRotatingFileHandler
+        RotatingFileHandler = WindowsSafeTimedRotatingFileHandler
+    except ImportError:
+        # Fallback to standard handler if import fails
+        RotatingFileHandler = TimedRotatingFileHandler
+else:
+    RotatingFileHandler = TimedRotatingFileHandler
 
 # Global flag to track if logging has been configured
 _logging_configured = False
@@ -66,7 +78,6 @@ def _configure_logging():
     
     # Define log files with their respective handlers
     log_files = {
-        'logs/app.log': logging.INFO,      # General application logs
         'logs/system.log': logging.WARNING, # System warnings and errors
         'logs/auth.log': logging.INFO,     # Authentication related logs
         'logs/billing.log': logging.INFO,  # Billing and subscription logs
@@ -75,11 +86,21 @@ def _configure_logging():
     
     # Add file handlers with rotation for each log file
     for log_file, level in log_files.items():
-        file_handler = TimedRotatingFileHandler(
+        # Create a specific logger for this file
+        log_name = log_file.replace('logs/', '').replace('.log', '')
+        specific_logger = logging.getLogger(log_name)
+        
+        # Clear existing handlers on specific logger to avoid duplicates
+        specific_logger.handlers.clear()
+        specific_logger.propagate = False  # Don't propagate to root logger
+        
+        # Use delay=True to avoid file locking issues on Windows
+        file_handler = RotatingFileHandler(
             filename=log_file,
             when='midnight',
             backupCount=14,  # Keep 14 days of logs
-            encoding='utf-8'
+            encoding='utf-8',
+            delay=True  # Don't open file until first write
         )
         file_handler.setLevel(level)
         file_handler.setFormatter(formatter)
@@ -87,7 +108,23 @@ def _configure_logging():
         # Set suffix for rotated files (YYYY-MM-DD format)
         file_handler.suffix = "%Y-%m-%d"
         
-        logger.addHandler(file_handler)
+        # Add handler to specific logger instead of root logger
+        specific_logger.addHandler(file_handler)
+        specific_logger.setLevel(level)
+    
+    # Add a general handler to the root logger for catch-all logging
+    # Use delay=True to avoid file locking issues on Windows
+    general_handler = RotatingFileHandler(
+        filename='logs/app.log',
+        when='midnight',
+        backupCount=14,
+        encoding='utf-8',
+        delay=True  # Don't open file until first write
+    )
+    general_handler.setLevel(logging.INFO)
+    general_handler.setFormatter(formatter)
+    general_handler.suffix = "%Y-%m-%d"
+    logger.addHandler(general_handler)
     
     # Add Streamlit handler if running in Streamlit context
     if _is_streamlit_running():
@@ -112,18 +149,25 @@ def _is_streamlit_running() -> bool:
     """
     try:
         import streamlit as st
-        return hasattr(st, '_is_running_with_streamlit') and st._is_running_with_streamlit
+        # Check if we're running within streamlit
+        if hasattr(st, '_is_running_with_streamlit') and st._is_running_with_streamlit:
+            return True
+        
+        # Check for streamlit context by looking for script run context
+        try:
+            from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
+            return get_script_run_ctx() is not None
+        except ImportError:
+            pass
+            
+        # Fallback: check if streamlit command is in sys.argv
+        import sys
+        return 'streamlit' in sys.argv[0] if sys.argv else False
+        
     except ImportError:
         return False
-    except AttributeError:
-        # Fallback check for older Streamlit versions
-        try:
-            import streamlit as st
-            # Try to access streamlit's session state as a way to detect if we're in streamlit
-            _ = st.session_state
-            return True
-        except:
-            return False
+    except Exception:
+        return False
 
 
 class StreamlitHandler(logging.Handler):
@@ -149,6 +193,30 @@ class StreamlitHandler(logging.Handler):
             # Fallback to print if Streamlit is not available
             print(self.format(record))
 
+
+def get_auth_logger():
+    """Get logger specifically for authentication events."""
+    # Ensure logging is configured before returning logger
+    get_logger('auth')
+    return logging.getLogger('auth')
+
+def get_billing_logger():
+    """Get logger specifically for billing events."""
+    # Ensure logging is configured before returning logger
+    get_logger('billing')
+    return logging.getLogger('billing')
+
+def get_crew_logger():
+    """Get logger specifically for CrewAI events."""
+    # Ensure logging is configured before returning logger
+    get_logger('crew')
+    return logging.getLogger('crew')
+
+def get_system_logger():
+    """Get logger specifically for system events."""
+    # Ensure logging is configured before returning logger
+    get_logger('system')
+    return logging.getLogger('system')
 
 def exception_info(logger: logging.Logger, msg: str):
     """

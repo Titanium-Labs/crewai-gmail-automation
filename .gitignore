@@ -171,3 +171,8 @@ stripe
 *.keystore
 *.jks
 
+# Encryption keys and security files
+.security/
+encryption.key
+salt.bin
+

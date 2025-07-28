@@ -47,19 +47,31 @@ class OAuth2GmailCrewAi:
     agents_config = 'config/agents.yaml'
     tasks_config = 'config/tasks.yaml'
 
-    def __init__(self, user_id=None, oauth_manager=None):
+    def __init__(self, user_id=None, oauth_manager=None, user_api_keys=None):
         """Initialize crew with OAuth2 authentication."""
         # Use provided parameters or fall back to environment variable
         self.user_id = user_id or os.environ.get("CURRENT_USER_ID")
         self.oauth_manager = oauth_manager
+        self.user_api_keys = user_api_keys or {}
         
         if not self.user_id:
             raise ValueError("User ID must be provided either as parameter or CURRENT_USER_ID environment variable")
             
         print(f"🔐 Using OAuth2 authentication for user: {self.user_id}")
+        if self.user_api_keys:
+            api_types = list(self.user_api_keys.keys())
+            print(f"🔑 User has personal API keys for: {', '.join(api_types)}")
         
         if not OAUTH2_AVAILABLE:
             raise ImportError("OAuth2Manager not available. Please check your OAuth2 setup.")
+        
+        # Setup LLM with user-specific API keys
+        try:
+            self.llm = self._setup_llm()
+            print(f"✅ CrewAI LLM setup completed for user: {self.user_id}")
+        except Exception as e:
+            print(f"❌ CrewAI LLM setup failed for user {self.user_id}: {e}")
+            raise
             
         # Initialize OAuth2Manager if not provided
         if not self.oauth_manager:
@@ -148,45 +160,84 @@ class OAuth2GmailCrewAi:
             print(f"❌ Error fetching emails: {e}")
             return inputs
 
-    # Ensure environment variables are loaded with override
-    load_dotenv(override=True)
-    
-    # Get model from environment with smart fallback
-    model = os.getenv("MODEL", "anthropic/claude-4-sonnet")
-    
-    # Determine which API key to use based on model
-    if "anthropic" in model.lower():
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            print("⚠️  ANTHROPIC_API_KEY not found, falling back to OpenAI")
-            model = "openai/gpt-4o-mini"
-            api_key = os.getenv("OPENAI_API_KEY")
-        else:
-            # Validate Anthropic API key format
-            if not api_key.startswith("sk-ant-"):
-                print(f"⚠️  Invalid ANTHROPIC_API_KEY format (should start with 'sk-ant-'), falling back to OpenAI")
+    def _setup_llm(self):
+        """Setup LLM with user-specific API keys and environment fallback."""
+        # Ensure environment variables are loaded with override
+        load_dotenv(override=True)
+        
+        # Get model from environment with smart fallback
+        model = os.getenv("MODEL", "anthropic/claude-4-sonnet")
+        
+        # Helper function to get API key with user preference and environment fallback
+        def get_api_key_with_fallback(key_type: str) -> str:
+            # Try user-specific key first
+            if self.user_api_keys and key_type in self.user_api_keys and self.user_api_keys[key_type]:
+                print(f"🔑 Using user's {key_type} API key")
+                return self.user_api_keys[key_type]
+            
+            # Fallback to environment key
+            env_key = os.getenv(f"{key_type.upper()}_API_KEY")
+            if env_key:
+                print(f"🌐 Using default {key_type} API key from environment")
+                return env_key
+            
+            return None
+        
+        # Determine which API key to use based on model
+        if "anthropic" in model.lower():
+            api_key = get_api_key_with_fallback("anthropic")
+            if not api_key:
+                print("⚠️  No Anthropic API key available, falling back to OpenAI")
                 model = "openai/gpt-4o-mini"
-                api_key = os.getenv("OPENAI_API_KEY")
-    else:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            print("⚠️  OPENAI_API_KEY not found, falling back to Claude")
-            model = "anthropic/claude-4-sonnet"
-            api_key = os.getenv("ANTHROPIC_API_KEY")
+                api_key = get_api_key_with_fallback("openai")
+            else:
+                # Validate Anthropic API key format
+                if not api_key.startswith("sk-ant-"):
+                    print(f"⚠️  Invalid Anthropic API key format (should start with 'sk-ant-'), falling back to OpenAI")
+                    model = "openai/gpt-4o-mini"
+                    api_key = get_api_key_with_fallback("openai")
         else:
-            # Validate OpenAI API key format
-            if not api_key.startswith("sk-"):
-                print(f"⚠️  Invalid OPENAI_API_KEY format (should start with 'sk-'), falling back to Claude")
+            api_key = get_api_key_with_fallback("openai")
+            if not api_key:
+                print("⚠️  No OpenAI API key available, falling back to Claude")
                 model = "anthropic/claude-4-sonnet"
-                api_key = os.getenv("ANTHROPIC_API_KEY")
-    
-    if not api_key:
-        raise ValueError("No valid API key found. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file.")
-    
-    print(f"🤖 Using model: {model}")
-    print(f"🔑 Using API key type: {'Anthropic' if 'anthropic' in model.lower() else 'OpenAI'}")
-    print(f"🔍 API key validation: {'✅ Valid format' if (api_key.startswith('sk-ant-') and 'anthropic' in model.lower()) or (api_key.startswith('sk-') and 'openai' in model.lower()) else '❌ Invalid format'}")
-    llm = LLM(model=model, api_key=api_key)
+                api_key = get_api_key_with_fallback("anthropic")
+            else:
+                # Validate OpenAI API key format
+                if not api_key.startswith("sk-"):
+                    print(f"⚠️  Invalid OpenAI API key format (should start with 'sk-'), falling back to Claude")
+                    model = "anthropic/claude-4-sonnet"
+                    api_key = get_api_key_with_fallback("anthropic")
+        
+        if not api_key:
+            error_msg = "No valid API key found. Please configure API keys in settings or set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file."
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
+        
+        # Validate API key format more thoroughly
+        is_valid_format = False
+        if "anthropic" in model.lower() and api_key.startswith("sk-ant-"):
+            is_valid_format = True
+        elif "openai" in model.lower() and api_key.startswith("sk-"):
+            is_valid_format = True
+            
+        if not is_valid_format:
+            error_msg = f"Invalid API key format for {model}. Anthropic keys should start with 'sk-ant-', OpenAI keys should start with 'sk-'."
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
+        
+        print(f"🤖 Using model: {model}")
+        print(f"🔑 Using API key type: {'Anthropic' if 'anthropic' in model.lower() else 'OpenAI'}")
+        print(f"🔍 API key validation: {'✅ Valid format' if is_valid_format else '❌ Invalid format'}")
+        
+        try:
+            llm_instance = LLM(model=model, api_key=api_key)
+            print(f"✅ LLM instance created successfully")
+            return llm_instance
+        except Exception as e:
+            error_msg = f"Failed to create LLM instance: {e}"
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
 
     @agent
     def categorizer(self) -> Agent:
@@ -311,17 +362,18 @@ class OAuth2GmailCrewAi:
             return "unknown@user.com"
 
 
-def create_crew_for_user(user_id: str, oauth_manager) -> OAuth2GmailCrewAi:
+def create_crew_for_user(user_id: str, oauth_manager, user_api_keys: dict = None) -> OAuth2GmailCrewAi:
     """Create and configure a crew for a specific user with OAuth2 authentication.
     
     Args:
         user_id: The unique identifier for the user
         oauth_manager: The OAuth2Manager instance for the user
+        user_api_keys: Optional dict with user-specific API keys {'anthropic': 'key', 'openai': 'key'}
         
     Returns:
         OAuth2GmailCrewAi: Configured crew instance for the user
     """
-    # Create a new crew instance with the user_id and oauth_manager
-    crew_instance = OAuth2GmailCrewAi(user_id=user_id, oauth_manager=oauth_manager)
+    # Create a new crew instance with the user_id, oauth_manager, and user API keys
+    crew_instance = OAuth2GmailCrewAi(user_id=user_id, oauth_manager=oauth_manager, user_api_keys=user_api_keys)
     
     return crew_instance 

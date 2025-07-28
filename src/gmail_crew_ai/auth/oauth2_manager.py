@@ -60,6 +60,7 @@ class OAuth2Manager:
         auth_url, _ = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
+            prompt='consent',  # Force consent screen to ensure refresh token
             state=user_id
         )
         
@@ -68,10 +69,12 @@ class OAuth2Manager:
     def handle_oauth_callback(self, user_id: str, authorization_code: str) -> bool:
         """Handle OAuth2 callback and save credentials."""
         try:
+            print(f"🔐 Processing OAuth callback for user: {user_id}")
             flow_key = f'oauth_flow_{user_id}'
             flow = st.session_state.get(flow_key)
             
             if not flow:
+                print(f"⚠️ No cached OAuth flow found for {user_id}, recreating...")
                 # Try to recreate the flow
                 try:
                     flow = Flow.from_client_secrets_file(
@@ -79,27 +82,35 @@ class OAuth2Manager:
                         scopes=self.SCOPES,
                         redirect_uri='http://localhost:8505'
                     )
+                    print("✅ OAuth flow recreated successfully")
                 except Exception as recreate_error:
+                    print(f"❌ Failed to recreate OAuth flow: {recreate_error}")
                     st.error(f"Failed to recreate OAuth flow: {recreate_error}")
                     return False
+            else:
+                print("✅ Using cached OAuth flow")
             
-            # Exchange authorization code for credentials
-            flow.fetch_token(code=authorization_code)
+            # Exchange authorization code for credentials with proper parameters
+            print("🔄 Exchanging authorization code for credentials...")
+            flow.fetch_token(
+                code=authorization_code,
+                # Ensure we request offline access for refresh token
+                include_granted_scopes=True
+            )
             credentials = flow.credentials
             
-            # Validate credentials have essential fields (more forgiving validation for callback)
-            essential_fields = ['token', 'refresh_token']
-            missing_essential = []
-            
-            for field in essential_fields:
-                if not hasattr(credentials, field) or getattr(credentials, field) is None:
-                    missing_essential.append(field)
-            
-            if missing_essential:
-                print(f"OAuth credentials missing essential fields: {', '.join(missing_essential)}")
-                st.error(f"OAuth authentication incomplete. Missing: {', '.join(missing_essential)}")
-                st.info("Please try authenticating again. If the problem persists, check your OAuth2 configuration.")
+            # Validate credentials have essential fields
+            if not hasattr(credentials, 'token') or credentials.token is None:
+                print("OAuth credentials missing access token")
+                st.error("🚫 OAuth authentication failed: No access token received")
                 return False
+            
+            # Check for refresh token (warn but don't fail)
+            if not hasattr(credentials, 'refresh_token') or credentials.refresh_token is None:
+                print("⚠️ OAuth credentials missing refresh token - token won't auto-refresh")
+                st.warning("⚠️ Login successful, but refresh token missing. You may need to re-authenticate more frequently.")
+                st.info("For better experience, revoke app access in Google Account settings and re-authenticate.")
+                # Continue with authentication even without refresh token
             
             # Log warnings for optional fields that are missing (but don't fail)
             optional_fields = ['token_uri', 'client_id', 'client_secret']
@@ -140,8 +151,25 @@ class OAuth2Manager:
             return True
             
         except Exception as e:
-            st.error(f"Authentication failed: {str(e)}")
-            st.exception(e)  # Show full stack trace
+            error_msg = str(e)
+            print(f"❌ OAuth callback failed for user {user_id}: {error_msg}")
+            
+            # Provide more specific error messages
+            if "invalid_grant" in error_msg.lower():
+                st.error("🔑 Authorization code expired or already used. Please try logging in again.")
+            elif "credentials" in error_msg.lower():
+                st.error("🔐 OAuth credentials file issue. Please check your credentials.json file.")
+            elif "client_id" in error_msg.lower() or "client_secret" in error_msg.lower():
+                st.error("🔧 OAuth client configuration error. Please check your Google Cloud Console settings.")
+            elif "redirect_uri" in error_msg.lower():
+                st.error("🌐 OAuth redirect URI mismatch. Please check your OAuth configuration.")
+            else:
+                st.error(f"🚫 Authentication failed: {error_msg}")
+            
+            # Only show full exception in debug mode
+            if os.getenv("DEBUG") == "true":
+                st.exception(e)
+            
             return False
     
     def save_credentials(self, user_id: str, credentials: Credentials):
@@ -162,6 +190,27 @@ class OAuth2Manager:
             for file_path in self.tokens_dir.glob(f"{user_id}_*_token.pickle"):
                 token_file = file_path
                 break
+            
+            # Also check for login_* patterns that might map to this user
+            if not token_file.exists():
+                # Look for any login_* token files that might belong to this user
+                for file_path in self.tokens_dir.glob("login_*_token.pickle"):
+                    try:
+                        # Try to load and check if this token belongs to our user
+                        with open(file_path, 'rb') as f:
+                            test_credentials = pickle.load(f)
+                        
+                        # If we can load it and it has a token, copy it to the expected location
+                        if hasattr(test_credentials, 'token') and test_credentials.token:
+                            expected_file = self.tokens_dir / f"{user_id}_token.pickle"
+                            # Copy the token file to the expected location
+                            import shutil
+                            shutil.copy2(file_path, expected_file)
+                            token_file = expected_file
+                            print(f"Mapped OAuth token from {file_path.name} to {expected_file.name}")
+                            break
+                    except Exception:
+                        continue
         
         if not token_file.exists():
             return None
@@ -170,19 +219,24 @@ class OAuth2Manager:
             with open(token_file, 'rb') as token:
                 credentials = pickle.load(token)
             
-            # Validate that credentials have required fields
-            required_fields = ['token', 'refresh_token', 'token_uri', 'client_id', 'client_secret']
+            # Validate that credentials have access token (essential)
+            if not hasattr(credentials, 'token') or credentials.token is None:
+                print(f"OAuth credentials missing access token for user {user_id}")
+                # Delete corrupted credentials file
+                token_file.unlink()
+                return None
+            
+            # Check for other fields (warn but don't delete)
+            optional_fields = ['refresh_token', 'token_uri', 'client_id', 'client_secret']
             missing_fields = []
             
-            for field in required_fields:
+            for field in optional_fields:
                 if not hasattr(credentials, field) or getattr(credentials, field) is None:
                     missing_fields.append(field)
             
             if missing_fields:
-                print(f"OAuth credentials missing required fields for user {user_id}: {', '.join(missing_fields)}")
-                # Delete corrupted credentials file
-                token_file.unlink()
-                return None
+                print(f"OAuth credentials missing optional fields for user {user_id}: {', '.join(missing_fields)}")
+                # Don't delete - these can be missing
             
             # Refresh credentials if expired
             if credentials and credentials.expired and credentials.refresh_token:

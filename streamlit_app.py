@@ -60,7 +60,14 @@ def safe_import(module_path, alias=None):
                 raise
         
         # Log the detailed error with stack trace
-        exception_info(log, f"Import failed: {module_path}")
+        try:
+            if 'exception_info' in globals() and globals()['exception_info'] is not None:
+                globals()['exception_info'](log, f"Import failed: {module_path}")
+            else:
+                log.error(f"Import failed: {module_path}", exc_info=True)
+        except Exception:
+            # Final fallback - just log the error normally
+            log.error(f"Import failed: {module_path}: {e}", exc_info=True)
         
         # Also display in Streamlit UI for user visibility
         st.error(f"❌ Import error for {module_path}: {e}")
@@ -74,6 +81,10 @@ try:
     # First import the logger system
     safe_import('src.common.logger.get_logger', 'get_logger')
     safe_import('src.common.logger.exception_info', 'exception_info')
+    safe_import('src.common.logger.get_auth_logger', 'get_auth_logger')
+    safe_import('src.common.logger.get_billing_logger', 'get_billing_logger')
+    safe_import('src.common.logger.get_crew_logger', 'get_crew_logger')
+    safe_import('src.common.logger.get_system_logger', 'get_system_logger')
     
     # Initialize logger
     log = get_logger(__name__)
@@ -87,6 +98,7 @@ try:
     safe_import('src.gmail_crew_ai.billing.SubscriptionManager', 'SubscriptionManager')
     safe_import('src.gmail_crew_ai.billing.UsageTracker', 'UsageTracker')
     safe_import('src.gmail_crew_ai.billing.streamlit_billing.show_billing_tab', 'show_billing_tab')
+    safe_import('src.common.security.APIKeyManager', 'APIKeyManager')
     safe_import('src.gmail_crew_ai.billing.models.PlanType', 'PlanType')
     
 except Exception as e:
@@ -124,7 +136,10 @@ class SessionManager:
             with open(self.sessions_file, 'w', encoding='utf-8') as f:
                 json.dump(sessions, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            exception_info(log, "Failed to save sessions")
+            if 'exception_info' in globals():
+                exception_info(log, "Failed to save sessions")
+            else:
+                log.error("Failed to save sessions", exc_info=True)
     
     def create_session(self, user_id: str) -> str:
         """Create a new session token for a user."""
@@ -997,6 +1012,22 @@ def inject_shadcn_css():
     }
     </style>
     """, unsafe_allow_html=True)
+    
+    def clear_sensitive_session_data(self):
+        """Clear sensitive data from Streamlit session state."""
+        sensitive_keys = [
+            'user_api_keys',
+            'decrypted_keys', 
+            'anthropic_key',
+            'openai_key',
+            'api_key_input',
+            'temp_api_key',
+            'masked_keys'
+        ]
+        for key in sensitive_keys:
+            if key in st.session_state:
+                del st.session_state[key]
+                log.debug(f"Cleared sensitive session data: {key}")
 
 
 class EmailService:
@@ -1027,7 +1058,10 @@ class EmailService:
             with open(self.approval_tokens_file, 'w', encoding='utf-8') as f:
                 json.dump(tokens, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            exception_info(log, "Failed to save approval tokens")
+            if 'exception_info' in globals():
+                exception_info(log, "Failed to save approval tokens")
+            else:
+                log.error("Failed to save approval tokens", exc_info=True)
     
     def generate_approval_token(self, user_id: str, email: str) -> str:
         """Generate a unique approval token for a user."""
@@ -1138,7 +1172,10 @@ class EmailService:
                 return True  # Still return True so user gets feedback
             
         except Exception as e:
-            exception_info(log, "Error sending approval email")
+            if 'exception_info' in globals():
+                exception_info(log, "Error sending approval email")
+            else:
+                log.error("Error sending approval email", exc_info=True)
             return False
     
     def send_actual_email(self, subject: str, html_body: str) -> bool:
@@ -1278,7 +1315,10 @@ class EmailService:
                 return True  # Still return True so user gets feedback
             
         except Exception as e:
-            exception_info(log, "Error sending approval email with OAuth2")
+            if 'exception_info' in globals():
+                exception_info(log, "Error sending approval email with OAuth2")
+            else:
+                log.error("Error sending approval email with OAuth2", exc_info=True)
             return False
     
     def send_email_via_oauth2(self, oauth_manager, user_id: str, to_email: str, subject: str, html_body: str) -> bool:
@@ -1323,6 +1363,12 @@ class UserManager:
     def __init__(self):
         self.users_file = "users.json"
         self.email_service = EmailService()
+        # Initialize secure API key manager
+        try:
+            self.api_key_manager = APIKeyManager()
+        except Exception as e:
+            log.warning(f"Could not initialize API key encryption: {e}")
+            self.api_key_manager = None
         self.ensure_users_file()
     
     def ensure_users_file(self):
@@ -1345,7 +1391,10 @@ class UserManager:
             with open(self.users_file, 'w', encoding='utf-8') as f:
                 json.dump(users, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            exception_info(log, "Failed to save users")
+            if 'exception_info' in globals():
+                exception_info(log, "Failed to save users")
+            else:
+                log.error("Failed to save users", exc_info=True)
             st.error(f"Error saving users: {e}")
     
     def register_user(self, email: str, google_id: str = "") -> bool:
@@ -1572,6 +1621,100 @@ class UserManager:
             return True
         
         return False
+    
+    def set_user_api_key(self, user_id: str, api_key_type: str, api_key: str) -> bool:
+        """Set an API key for a specific user with encryption."""
+        try:
+            users = self.load_users()
+            if user_id not in users:
+                return False
+            
+            # Initialize api_keys dict if it doesn't exist
+            if 'api_keys' not in users[user_id]:
+                users[user_id]['api_keys'] = {}
+            
+            # Encrypt and store the API key
+            if self.api_key_manager:
+                try:
+                    encrypted_key = self.api_key_manager.store_api_key(f"{user_id}_{api_key_type}", api_key)
+                    users[user_id]['api_keys'][api_key_type] = encrypted_key
+                    # Mark as encrypted for future identification
+                    users[user_id]['api_keys'][f"{api_key_type}_encrypted"] = True
+                except ValueError as e:
+                    log.error(f"Invalid API key format for {api_key_type}: {e}")
+                    return False
+            else:
+                # Fallback to plain storage if encryption not available
+                log.warning("API key encryption not available, storing in plain text")
+                users[user_id]['api_keys'][api_key_type] = api_key
+                users[user_id]['api_keys'][f"{api_key_type}_encrypted"] = False
+            
+            self.save_users(users)
+            log.info(f"API key set for user {user_id}, type: {api_key_type}")
+            return True
+        except Exception as e:
+            if 'exception_info' in globals():
+                exception_info(log, f"Error setting API key for user {user_id}")
+            else:
+                log.error(f"Error setting API key for user {user_id}: {e}", exc_info=True)
+            return False
+    
+    def get_user_api_key(self, user_id: str, api_key_type: str) -> str:
+        """Get an API key for a specific user with decryption, fallback to environment."""
+        try:
+            users = self.load_users()
+            if user_id in users and 'api_keys' in users[user_id]:
+                encrypted_key = users[user_id]['api_keys'].get(api_key_type)
+                if encrypted_key:
+                    # Check if key is encrypted
+                    is_encrypted = users[user_id]['api_keys'].get(f"{api_key_type}_encrypted", True)
+                    
+                    if is_encrypted and self.api_key_manager:
+                        # Decrypt the key
+                        try:
+                            decrypted_key = self.api_key_manager.retrieve_api_key(encrypted_key)
+                            if decrypted_key:
+                                return decrypted_key
+                            else:
+                                log.warning(f"Could not decrypt API key for user {user_id}, type {api_key_type}")
+                        except Exception as e:
+                            log.error(f"Decryption failed for user {user_id} API key {api_key_type}: {e}")
+                    else:
+                        # Return plain text key (legacy or fallback)
+                        return encrypted_key
+            
+            # Fallback to environment variable
+            env_key = os.getenv(f"{api_key_type.upper()}_API_KEY", '')
+            return env_key
+        except Exception as e:
+            log.error(f"Error getting API key for user {user_id}: {e}")
+            # Fallback to environment variable
+            return os.getenv(f"{api_key_type.upper()}_API_KEY", '')
+    
+    def has_user_api_key(self, user_id: str, api_key_type: str) -> bool:
+        """Check if user has their own API key (not using fallback)."""
+        try:
+            users = self.load_users()
+            if user_id in users and 'api_keys' in users[user_id]:
+                return api_key_type in users[user_id]['api_keys']
+            return False
+        except Exception as e:
+            print(f"Error checking user API key for {user_id}: {e}")
+            return False
+    
+    def remove_user_api_key(self, user_id: str, api_key_type: str) -> bool:
+        """Remove a user's API key (will fallback to environment)."""
+        try:
+            users = self.load_users()
+            if user_id in users and 'api_keys' in users[user_id]:
+                if api_key_type in users[user_id]['api_keys']:
+                    del users[user_id]['api_keys'][api_key_type]
+                    self.save_users(users)
+                    return True
+            return False
+        except Exception as e:
+            print(f"Error removing API key for user {user_id}: {e}")
+            return False
 
 
 
@@ -1715,7 +1858,10 @@ def check_persistent_session():
             st.session_state.authentication_step = 'login'
         
     except Exception as e:
-        exception_info(log, "Error checking persistent session")
+        if 'exception_info' in globals():
+            exception_info(log, "Error checking persistent session")
+        else:
+            log.error("Error checking persistent session", exc_info=True)
         # On error, ensure we're in login state
         st.session_state.authentication_step = 'login'
     
@@ -2491,12 +2637,15 @@ def show_dashboard():
         st.markdown("*AI-powered email management*")
     
     with col3:
-        if st.button("🚪 Logout", help="Logout and clear session"):
+        if st.button("🚪 Logout"):
             # Clear persistent session
             browser_token = session_manager.get_browser_session()
             if browser_token:
                 session_manager.invalidate_session(browser_token)
             session_manager.clear_browser_session()
+            
+            # Clear sensitive data first
+            session_manager.clear_sensitive_session_data()
             
             # Clear all session state variables
             session_keys_to_clear = [
@@ -2590,7 +2739,6 @@ def show_rules_tab(user_id: str, oauth_manager):
             rule_filter = st.text_input(
                 "Filter Condition", 
                 placeholder="e.g., from:client.com OR subject:urgent",
-                help="Use Gmail search syntax to match emails. Examples: from:sender.com, subject:urgent, is:unread AND has:attachment",
                 label_visibility="collapsed"
             )
             
@@ -2598,14 +2746,14 @@ def show_rules_tab(user_id: str, oauth_manager):
             st.markdown("**Quick Examples:**")
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("📧 From Domain", help="Emails from specific domain"):
+                if st.button("📧 From Domain"):
                     st.session_state.temp_filter = "from:company.com"
-                if st.button("📝 Subject Contains", help="Subject contains specific text"):
+                if st.button("📝 Subject Contains"):
                     st.session_state.temp_filter = "subject:urgent"
             with col_b:
-                if st.button("🔴 High Priority", help="Important emails"):
+                if st.button("🔴 High Priority"):
                     st.session_state.temp_filter = "is:important"
-                if st.button("📎 Has Attachment", help="Emails with attachments"):
+                if st.button("📎 Has Attachment"):
                     st.session_state.temp_filter = "has:attachment"
         
         with col2:
@@ -2613,7 +2761,6 @@ def show_rules_tab(user_id: str, oauth_manager):
             rule_action = st.text_area(
                 "AI Instructions",
                 placeholder="e.g., Reply with acknowledgment, mark as high priority, and create calendar reminder",
-                help="Tell the AI exactly how to handle emails matching this filter. Be specific about desired outcomes.",
                 height=120,
                 label_visibility="collapsed"
             )
@@ -3030,27 +3177,27 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     
     # Quick filter buttons - compact icon-only design
     with col1:
-        if st.button("📧", help="Unread emails (is:unread)", key="filter_unread"):
+        if st.button("📧", key="filter_unread"):
             st.session_state.gmail_search = "is:unread"
     
     with col2:
-        if st.button("⭐", help="Starred emails (is:starred)", key="filter_starred"):
+        if st.button("⭐", key="filter_starred"):
             st.session_state.gmail_search = "is:starred"
     
     with col3:
-        if st.button("📎", help="Emails with attachments (has:attachment)", key="filter_attachment"):
+        if st.button("📎", key="filter_attachment"):
             st.session_state.gmail_search = "has:attachment"
     
     with col4:
-        if st.button("🔴", help="Important emails (is:important)", key="filter_important"):
+        if st.button("🔴", key="filter_important"):
             st.session_state.gmail_search = "is:important"
     
     with col5:
-        if st.button("📅", help="Today's emails (newer_than:1d)", key="filter_today"):
+        if st.button("📅", key="filter_today"):
             st.session_state.gmail_search = "newer_than:1d"
     
     with col6:
-        if st.button("🗂️", help="Primary category (category:primary)", key="filter_primary"):
+        if st.button("🗂️", key="filter_primary"):
             st.session_state.gmail_search = "category:primary"
     
     # Gmail search input - use session state value directly to avoid widget conflicts
@@ -3059,7 +3206,6 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
             "Gmail Search Query",
             value=st.session_state.gmail_search,
             placeholder="e.g., from:example.com is:unread subject:(urgent OR important)",
-            help="Use Gmail search syntax. Examples: from:sender@email.com, to:me, subject:urgent, is:starred, has:attachment",
             key="gmail_search_input",
             label_visibility="collapsed"
         )
@@ -3084,7 +3230,7 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     # Processing control buttons
     with col9:
         if not st.session_state.processing_active:
-            if st.button(" Start", type="primary", help="Start email processing", key="start_processing"):
+            if st.button(" Start", type="primary", key="start_processing"):
                 # Initialize processing state
                 st.session_state.processing_active = True
                 st.session_state.processing_started = False
@@ -3092,11 +3238,11 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
                 st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Starting email processing...")
                 st.rerun()
         else:
-            st.button(" Running", disabled=True, help="Processing in progress", key="processing_status")
+            st.button(" Running", disabled=True, key="processing_status")
     
     with col10:
         if st.session_state.processing_active:
-            if st.button(" Stop", type="secondary", help="Stop email processing", key="stop_processing"):
+            if st.button(" Stop", type="secondary", key="stop_processing"):
                 st.session_state.processing_active = False
                 st.session_state.processing_stopped = True
                 st.session_state.processing_started = False
@@ -3104,7 +3250,7 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
                 st.warning(" Processing stopped by user")
                 st.rerun()
         else:
-            st.button(" Stop", disabled=True, help="Stop email processing", key="stop_disabled")
+            st.button(" Stop", disabled=True, key="stop_disabled")
     
 
     # Activity Window - Always visible  
@@ -3125,13 +3271,13 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
         # Show current status
         if st.session_state.processing_active:
             if st.session_state.get('processing_started', False):
-                st.info("🔄 **AI Crew is processing your emails...** Real-time progress shown below.")
+                pass  # Processing status shown in activity logs
             else:
-                st.info("🚀 **Starting AI Crew...** Initializing agents and tasks.")
+                pass  # Starting status shown in activity logs
         elif st.session_state.activity_logs:
             st.success("✅ **Processing completed!** Review the activity log below.")
         else:
-            st.info("📋 **Ready to process emails.** Click 'Start' to begin and see real-time activity here.")
+            pass  # No status needed when ready
         
         # Live activity log with auto-scroll
         activity_placeholder = st.empty()
@@ -3189,7 +3335,7 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     
     # Clear logs button
     if st.session_state.activity_logs:
-        if st.button("🗑️ Clear Activity Log", help="Clear the activity log history"):
+        if st.button("🗑️ Clear Activity Log"):
             st.session_state.activity_logs = []
             st.rerun()
 
@@ -3216,7 +3362,6 @@ def show_rules_tab(user_id: str, oauth_manager: OAuth2Manager):
             gmail_condition = st.text_input(
                 "Search Query",
                 placeholder="e.g., from:newsletter@company.com OR subject:unsubscribe",
-                help="Copy Gmail search filters directly here. Examples: from:sender.com, subject:urgent, is:unread AND has:attachment"
             )
             
             # Quick condition builders
@@ -3291,7 +3436,6 @@ def show_rules_tab(user_id: str, oauth_manager: OAuth2Manager):
             ai_instructions = st.text_area(
                 "Additional AI Instructions",
                 placeholder="Special instructions for the AI when processing emails matching this rule...",
-                help="Tell the AI how to handle emails that match this rule. Be specific about the desired outcome."
             )
             
             # Test the Gmail search
@@ -3609,7 +3753,7 @@ def show_processing_history_enhanced():
                     st.markdown(file_info[" Size"])
                 
                 with col4:
-                    if st.button("", key=f"view_history_{i}", help="View file"):
+                    if st.button("", key=f"view_history_{i}"):
                         show_formatted_report(file_info[' File'])
                 
                 with col5:
@@ -3623,7 +3767,6 @@ def show_processing_history_enhanced():
                         file_name=file_info[' File'],
                         mime="application/json",
                         key=f"download_history_{i}",
-                        help="Download file"
                     )
     else:
         st.info(" No output directory found.")
@@ -4319,7 +4462,7 @@ def show_error_logs_tab(user_id: str, oauth_manager: OAuth2Manager):
         show_resolved = st.checkbox("Show Resolved", value=False, key="show_resolved")
     
     with col3:
-        if st.button(" Clean Old Errors", help="Remove errors older than 30 days"):
+        if st.button(" Clean Old Errors"):
             cleaned = error_logger.cleanup_old_errors()
             if cleaned > 0:
                 st.success(f" Cleaned up {cleaned} old errors")
@@ -4328,7 +4471,7 @@ def show_error_logs_tab(user_id: str, oauth_manager: OAuth2Manager):
                 st.info("No old errors to clean")
     
     with col4:
-        if st.button(" Test Error", help="Add a test error for demonstration"):
+        if st.button(" Test Error"):
             error_logger.log_error(
                 "System", 
                 "Test error message", 
@@ -4451,8 +4594,12 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
     """Show settings interface."""
     st.markdown("##  Settings")
     
-    # User info
-    user_email = oauth_manager.get_user_email(user_id)
+    # User info - get OAuth user ID from session state
+    oauth_user_id = st.session_state.get('current_user')
+    if oauth_user_id:
+        user_email = oauth_manager.get_user_email(oauth_user_id)
+    else:
+        user_email = "Unknown"
     st.markdown(f"**Current User:** {user_email}")
     st.markdown(f"**User ID:** {user_id}")
     
@@ -4508,18 +4655,31 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
         "Select AI Model",
         options=list(model_options.keys()),
         index=list(model_options.keys()).index(current_model_name),
-        help="Choose the AI model for email processing. Different models have different capabilities and costs."
     )
     
     selected_model_config = model_options[selected_model_name]
     selected_model_value = selected_model_config['value']
     
-    # Show model description with inline status
+    # Show model description with inline status (check user-specific API keys)
     required_api_key = selected_model_config['api_key_env']
-    api_key_available = bool(os.getenv(required_api_key))
-    status_icon = "✅" if api_key_available else "❌"
+    user_manager = st.session_state.user_manager
     
-    st.markdown(f"{status_icon} **{selected_model_name}**: {selected_model_config['description']}")
+    # Check if user has their own API key or fallback is available
+    user_has_key = user_manager.has_user_api_key(user_id, required_api_key)
+    fallback_key = bool(os.getenv(required_api_key))
+    api_key_available = user_has_key or fallback_key
+    
+    if user_has_key:
+        status_icon = "🔑"  # User has their own key
+        key_source = " (Your Key)"
+    elif fallback_key:
+        status_icon = "🌐"  # Using fallback
+        key_source = " (Fallback)"
+    else:
+        status_icon = "❌"  # No key available
+        key_source = ""
+    
+    st.markdown(f"{status_icon} **{selected_model_name}**: {selected_model_config['description']}{key_source}")
     
     # Update model if changed
     if selected_model_value != st.session_state.selected_model:
@@ -4545,105 +4705,124 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
     # Create columns for API key inputs
     col1, col2 = st.columns(2)
     
+    user_manager = st.session_state.user_manager
+    current_user_id = st.session_state.authenticated_user_id
+    
     with col1:
         st.markdown("#### Anthropic API Key")
-        current_anthropic_key = os.getenv('ANTHROPIC_API_KEY', '')
-        masked_anthropic = current_anthropic_key[:12] + '...' + current_anthropic_key[-8:] if current_anthropic_key else ''
+        
+        # Get user's API key or fallback to env
+        user_anthropic_key = user_manager.get_user_api_key(current_user_id, 'anthropic')
+        env_anthropic_key = os.getenv('ANTHROPIC_API_KEY', '')
+        
+        # Determine current key and source
+        if user_anthropic_key:
+            current_anthropic_key = user_anthropic_key
+            key_source = "🔑 Your key"
+        elif env_anthropic_key:
+            current_anthropic_key = env_anthropic_key
+            key_source = "🌐 Default key"
+        else:
+            current_anthropic_key = ''
+            key_source = "❌ Not configured"
+        
+        # Use secure masking if available
+        if user_manager.api_key_manager and current_anthropic_key:
+            masked_anthropic = user_manager.api_key_manager.mask_api_key(current_anthropic_key)
+        else:
+            masked_anthropic = current_anthropic_key[:8] + '...' + current_anthropic_key[-4:] if current_anthropic_key else ''
+        
+        st.markdown(f"**Status**: {key_source}")
         
         anthropic_key = st.text_input(
-            "Anthropic API Key", 
-            value=masked_anthropic,
+            "Your Anthropic API Key", 
+            value=masked_anthropic if user_anthropic_key else '',
             type="password",
-            help="Your Anthropic API key for Claude models. Get it from https://console.anthropic.com/",
             placeholder="sk-ant-api03-..."
         )
         
-        if anthropic_key and anthropic_key != masked_anthropic:
-            os.environ['ANTHROPIC_API_KEY'] = anthropic_key
-            st.session_state.api_keys_updated = True
+        # Save/Remove buttons
+        col1a, col1b = st.columns(2)
+        with col1a:
+            if st.button("💾 Save", key="save_anthropic"):
+                if anthropic_key and anthropic_key != masked_anthropic:
+                    if user_manager.set_user_api_key(current_user_id, 'anthropic', anthropic_key):
+                        st.success("✅ Anthropic API key saved!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to save API key")
+                elif not anthropic_key:
+                    st.warning("Please enter an API key")
+        
+        with col1b:
+            if user_anthropic_key and st.button("🗑️ Remove", key="remove_anthropic"):
+                if user_manager.remove_user_api_key(current_user_id, 'anthropic'):
+                    st.success("✅ Your API key removed! Using default key.")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to remove API key")
     
     with col2:
         st.markdown("#### OpenAI API Key")
-        current_openai_key = os.getenv('OPENAI_API_KEY', '')
-        masked_openai = current_openai_key[:12] + '...' + current_openai_key[-8:] if current_openai_key else ''
+        
+        # Get user's API key or fallback to env
+        user_openai_key = user_manager.get_user_api_key(current_user_id, 'openai')
+        env_openai_key = os.getenv('OPENAI_API_KEY', '')
+        
+        # Determine current key and source
+        if user_openai_key:
+            current_openai_key = user_openai_key
+            key_source = "🔑 Your key"
+        elif env_openai_key:
+            current_openai_key = env_openai_key
+            key_source = "🌐 Default key"
+        else:
+            current_openai_key = ''
+            key_source = "❌ Not configured"
+        
+        # Use secure masking if available
+        if user_manager.api_key_manager and current_openai_key:
+            masked_openai = user_manager.api_key_manager.mask_api_key(current_openai_key)
+        else:
+            masked_openai = current_openai_key[:8] + '...' + current_openai_key[-4:] if current_openai_key else ''
+        
+        st.markdown(f"**Status**: {key_source}")
         
         openai_key = st.text_input(
-            "OpenAI API Key",
-            value=masked_openai,
+            "Your OpenAI API Key",
+            value=masked_openai if user_openai_key else '',
             type="password", 
-            help="Your OpenAI API key for GPT models. Get it from https://platform.openai.com/api-keys",
             placeholder="sk-proj-..."
         )
         
-        if openai_key and openai_key != masked_openai:
-            os.environ['OPENAI_API_KEY'] = openai_key
-            st.session_state.api_keys_updated = True
-    
-    # Update .env file if keys were changed
-    if st.session_state.api_keys_updated:
-        if st.button(" Save API Keys to .env file", help="Permanently save these API keys to your .env file"):
-            try:
-                # Read current .env file
-                env_file_path = '.env'
-                env_lines = []
-                
-                if os.path.exists(env_file_path):
-                    with open(env_file_path, 'r') as f:
-                        env_lines = f.readlines()
-                
-                # Update or add API keys
-                updated_lines = []
-                anthropic_updated = False
-                openai_updated = False
-                
-                for line in env_lines:
-                    if line.startswith('ANTHROPIC_API_KEY='):
-                        if anthropic_key and anthropic_key != masked_anthropic:
-                            updated_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
-                            anthropic_updated = True
-                        else:
-                            updated_lines.append(line)
-                    elif line.startswith('OPENAI_API_KEY='):
-                        if openai_key and openai_key != masked_openai:
-                            updated_lines.append(f'OPENAI_API_KEY={openai_key}\n')
-                            openai_updated = True
-                        else:
-                            updated_lines.append(line)
+        # Save/Remove buttons
+        col2a, col2b = st.columns(2)
+        with col2a:
+            if st.button("💾 Save", key="save_openai"):
+                if openai_key and openai_key != masked_openai:
+                    if user_manager.set_user_api_key(current_user_id, 'openai', openai_key):
+                        st.success("✅ OpenAI API key saved!")
+                        st.rerun()
                     else:
-                        updated_lines.append(line)
-                
-                # Add new keys if they weren't found in existing file
-                if not anthropic_updated and anthropic_key and anthropic_key != masked_anthropic:
-                    updated_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
-                
-                if not openai_updated and openai_key and openai_key != masked_openai:
-                    updated_lines.append(f'OPENAI_API_KEY={openai_key}\n')
-                
-                # Write updated .env file
-                with open(env_file_path, 'w') as f:
-                    f.writelines(updated_lines)
-                
-                st.session_state.api_keys_updated = False
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"❌ Error saving API keys: {str(e)}")
+                        st.error("❌ Failed to save API key")
+                elif not openai_key:
+                    st.warning("Please enter an API key")
+        
+        with col2b:
+            if user_openai_key and st.button("🗑️ Remove", key="remove_openai"):
+                if user_manager.remove_user_api_key(current_user_id, 'openai'):
+                    st.success("✅ Your API key removed! Using default key.")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to remove API key")
     
-    # Show current API key status
-    st.markdown("#### API Key Status")
-    
-    anthropic_status = "✅ Configured" if os.getenv('ANTHROPIC_API_KEY') else "❌ Not set"
-    openai_status = "✅ Configured" if os.getenv('OPENAI_API_KEY') else "❌ Not set"
-    
-    st.markdown(f"**Anthropic API Key**: {anthropic_status}")
-    st.markdown(f"**OpenAI API Key**: {openai_status}")
     
     st.markdown("---")
     
     # OAuth2 settings
     st.markdown("### 🔐 Authentication Settings")
     
-    if st.button(" Refresh Authentication", help="Refresh OAuth2 token"):
+    if st.button(" Refresh Authentication"):
         try:
             # Get the actual OAuth user ID that matches this internal user ID
             user_manager = st.session_state.user_manager
@@ -4668,7 +4847,7 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
         except Exception as e:
             st.error(f"Error refreshing authentication: {e}")
     
-    if st.button(" Clean Up OAuth Tokens", help="Remove corrupted OAuth tokens"):
+    if st.button(" Clean Up OAuth Tokens"):
         try:
             removed_count = oauth_manager.cleanup_corrupted_tokens()
             if removed_count > 0:
@@ -4678,7 +4857,7 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
         except Exception as e:
             st.error(f"Error cleaning up tokens: {e}")
     
-    if st.button(" Remove This Account", type="secondary", help="Remove OAuth2 access for this account"):
+    if st.button(" Remove This Account", type="secondary"):
         confirm_remove = st.checkbox("I confirm I want to remove this account")
         if confirm_remove and st.button("Confirm Removal", type="secondary"):
             if oauth_manager.revoke_credentials(user_id):
@@ -4729,7 +4908,7 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button(" Rebuild User Persona", help="Analyze all sent emails to completely rebuild user persona"):
+        if st.button(" Rebuild User Persona"):
             try:
                 from src.gmail_crew_ai.tools.gmail_oauth_tools import OAuth2GetSentEmailsTool, OAuth2UserPersonaAnalyzerTool
                 
@@ -4762,7 +4941,7 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
                 st.error(f"Error rebuilding user persona: {e}")
     
     with col2:
-        if st.button(" Update User Persona", help="Update existing user persona with recent email data (last 30 days)"):
+        if st.button(" Update User Persona"):
             try:
                 from src.gmail_crew_ai.tools.gmail_oauth_tools import OAuth2UserPersonaUpdaterTool
                 
@@ -4795,10 +4974,9 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
         max_value=90,
         value=30,
         step=7,
-        help="Choose how many days back to analyze for persona updates"
     )
     
-    if st.button(" Custom Update", help=f"Update persona with emails from last {days_back} days"):
+    if st.button(" Custom Update"):
         try:
             from src.gmail_crew_ai.tools.gmail_oauth_tools import OAuth2UserPersonaUpdaterTool
             
@@ -4822,7 +5000,7 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
     
     st.markdown("---")
     
-    if st.button(" Clear User Persona", type="secondary", help="Clear current user persona"):
+    if st.button(" Clear User Persona", type="secondary"):
         confirm_clear = st.checkbox("I confirm I want to clear the user persona")
         if confirm_clear and st.button("Confirm Clear", type="secondary"):
             try:
@@ -4931,8 +5109,13 @@ def log_to_activity_window(message):
 def check_and_fix_oauth_credentials(user_id: str, oauth_manager) -> bool:
     """Check OAuth credentials and fix if invalid."""
     try:
+        # Get OAuth user ID from session state
+        oauth_user_id = st.session_state.get('current_user')
+        if not oauth_user_id:
+            return False
+            
         # Test if credentials work by attempting to get user email
-        oauth_manager.get_user_email(user_id)
+        oauth_manager.get_user_email(oauth_user_id)
         return True
     except Exception as e:
         if "No valid credentials found" in str(e):
@@ -5019,7 +5202,6 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                 f"[{datetime.now().strftime('%H:%M:%S')}] ▶️ Continuing with processing (billing check failed)"
             )
             st.warning(f" Warning: Billing system error: {str(usage_error)}")
-            st.info(" Continuing with email processing...")
     
     # Parse Gmail search query into structured filters
     gmail_search = st.session_state.get('gmail_search', 'is:unread')
@@ -5046,8 +5228,12 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             st.session_state.processing_stopped = False
             return
         
-        # Set up environment for this user
-        user_email = oauth_manager.get_user_email(user_id)
+        # Set up environment for this user - get OAuth user ID from session state
+        oauth_user_id = st.session_state.get('current_user')
+        if oauth_user_id:
+            user_email = oauth_manager.get_user_email(oauth_user_id)
+        else:
+            user_email = "Unknown"
         st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 👤 Processing for user: {user_email}")
         
         # Set filters and rules in environment for crew to use
@@ -5079,21 +5265,35 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Using default AI model: {default_model}")
             log.warning(f"No selected model found, using default: {default_model}")
         
-        # Create a crew for this specific user (now with correct MODEL env var)
-        crew = create_crew_for_user(user_id, oauth_manager)
+        # Get user's API keys for the crew
+        user_manager = st.session_state.user_manager
+        user_api_keys = {}
+        if user_manager.has_user_api_key(user_id, 'anthropic'):
+            user_api_keys['anthropic'] = user_manager.get_user_api_key(user_id, 'anthropic')
+        if user_manager.has_user_api_key(user_id, 'openai'):
+            user_api_keys['openai'] = user_manager.get_user_api_key(user_id, 'openai')
+        
+        # Create a crew for this specific user (now with correct MODEL env var and user API keys)
+        crew = create_crew_for_user(user_id, oauth_manager, user_api_keys)
         
         st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 AI crew initialized, starting processing...")
         
         # Run the crew with enhanced logging and output capture
         try:
+            # Get crew-specific logger
+            crew_log = get_crew_logger()
+            crew_log.info(f"Starting CrewAI execution for user {user_id}")
+            crew_log.info(f"Using model: {os.getenv('MODEL', 'default')}")
+            crew_log.info(f"Email filters: {filters}")
+            
             st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⚡ Starting AI crew execution...")
             st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🧠 Initializing AI agents: Categorizer, Organizer, Response Generator, Cleaner")
             st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Processing tasks: Categorization → Organization → Response Generation → Cleanup")
             
-            # Create a progress indicator
+            # Create a progress indicator  
             progress_placeholder = st.empty()
             with progress_placeholder:
-                st.info(" AI crew is processing your emails... Check the activity window below for real-time updates.")
+                pass  # Progress shown in activity logs
             
             # Capture CrewAI output and display in activity window
             import sys
@@ -5216,6 +5416,11 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                             f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Failed to record usage: {str(usage_error)}"
                         )
                     
+            # Log successful completion to crew logger
+            crew_log = get_crew_logger()
+            crew_log.info(f"CrewAI execution completed successfully for user {user_id}")
+            crew_log.info(f"User email: {user_email}")
+            
             # Reset processing state after successful completion
             st.session_state.processing_active = False
             st.session_state.processing_started = False
@@ -5225,10 +5430,16 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             # Enhanced crew-specific error handling with detailed user notification
             crew_error_str = str(crew_error)
             
+            # Log to crew-specific logger first
+            crew_log = get_crew_logger()
+            crew_log.error(f"CrewAI execution failed for user {user_id}: {crew_error_str}")
+            crew_log.error(f"Filters used: {json.dumps(filters)}")
+            crew_log.error(f"User email: {user_email}")
+            
             # Analyze error type and provide specific guidance
             error_analysis = analyze_crew_error(crew_error_str)
             
-            # Log detailed error information
+            # Log detailed error information to ErrorLogger
             error_logger.log_error(
                 "CrewAI", 
                 f"CrewAI execution failed: {crew_error_str}",
@@ -5268,14 +5479,14 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                 # Provide immediate action buttons
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    if st.button("🔄 Retry Processing", help="Try processing again"):
+                    if st.button("🔄 Retry Processing"):
                         st.rerun()
                 with col2:
-                    if st.button("🔧 Check Settings", help="Go to Settings tab"):
+                    if st.button("🔧 Check Settings"):
                         st.session_state.selected_main_tab = "⚙️ Settings"
                         st.rerun()
                 with col3:
-                    if st.button("📞 Get Help", help="View help documentation"):
+                    if st.button("📞 Get Help"):
                         st.session_state.selected_main_tab = "❓ Help"
                         st.rerun()
             
@@ -5295,7 +5506,7 @@ def process_emails_with_filters(user_id: str, oauth_manager):
         error_logger.log_error(
             error_analysis['category'], 
             f"Email processing failed: {error_str}",
-            f"Error during email processing for user {oauth_manager.get_user_email(user_id)}. Filters: {json.dumps(filters)}. Analysis: {error_analysis['category']}",
+            f"Error during email processing for user {user_email if 'user_email' in locals() else 'Unknown'}. Filters: {json.dumps(filters)}. Analysis: {error_analysis['category']}",
             user_id
         )
         
@@ -5327,21 +5538,21 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             
             # Show processing context
             st.markdown("**📊 Processing Context:**")
-            st.markdown(f"- **User:** {oauth_manager.get_user_email(user_id)}")
+            st.markdown(f"- **User:** {user_email if 'user_email' in locals() else 'Unknown'}")
             st.markdown(f"- **Search Query:** `{filters.get('gmail_search', 'is:unread')}`")
             st.markdown(f"- **Max Emails:** {filters.get('max_emails', 10)}")
             
             # Provide immediate action buttons
             col1, col2, col3 = st.columns(3)
             with col1:
-                if st.button("🔄 Retry Processing", help="Try processing again", key="retry_general"):
+                if st.button("🔄 Retry Processing", key="retry_general"):
                     st.rerun()
             with col2:
-                if st.button("🔧 Check Settings", help="Go to Settings tab", key="settings_general"):
+                if st.button("🔧 Check Settings", key="settings_general"):
                     st.session_state.selected_main_tab = "⚙️ Settings"
                     st.rerun()
             with col3:
-                if st.button("📞 Get Help", help="View help documentation", key="help_general"):
+                if st.button("📞 Get Help", key="help_general"):
                     st.session_state.selected_main_tab = "❓ Help"
                     st.rerun()
 
@@ -5359,17 +5570,42 @@ def analyze_crew_error(error_message: str) -> dict:
     }
     
     # API Key Issues
-    if any(phrase in error_message_lower for phrase in ['api_key', 'authentication', 'openai_api_key', 'anthropic_api_key']):
-        analysis.update({
-            'category': 'API Key Configuration',
-            'user_message': 'The AI model API key is missing or invalid. This prevents the AI agents from working.',
-            'solutions': [
-                'Go to Settings → AI Model Configuration and verify your API key is set',
-                'Check that you selected the correct model for your available API keys',
-                'Ensure your API key has sufficient credits/quota',
-                'Try switching to a different AI model if you have multiple API keys configured'
-            ]
-        })
+    if any(phrase in error_message_lower for phrase in ['api_key', 'authentication', 'openai_api_key', 'anthropic_api_key', 'invalid x-api-key']):
+        if 'anthropic' in error_message_lower or 'claude' in error_message_lower:
+            analysis.update({
+                'category': 'Anthropic API Key Issue',
+                'user_message': 'Your Anthropic API key is invalid, expired, or missing. Claude models cannot function without a valid key.',
+                'solutions': [
+                    'Go to Settings → API Key Configuration and update your Anthropic API key',
+                    'Get a new API key from https://console.anthropic.com/',
+                    'Check if your Anthropic account has sufficient credits',
+                    'Switch to OpenAI models if you have a valid OpenAI API key',
+                    'Contact Anthropic support if you believe your key should be working'
+                ]
+            })
+        elif 'openai' in error_message_lower or 'gpt' in error_message_lower:
+            analysis.update({
+                'category': 'OpenAI API Key Issue',
+                'user_message': 'Your OpenAI API key is invalid, expired, or missing. GPT models cannot function without a valid key.',
+                'solutions': [
+                    'Go to Settings → API Key Configuration and update your OpenAI API key',
+                    'Get a new API key from https://platform.openai.com/api-keys',
+                    'Check if your OpenAI account has sufficient credits',
+                    'Switch to Anthropic models if you have a valid Anthropic API key',
+                    'Contact OpenAI support if you believe your key should be working'
+                ]
+            })
+        else:
+            analysis.update({
+                'category': 'API Key Configuration',
+                'user_message': 'The AI model API key is missing or invalid. This prevents the AI agents from working.',
+                'solutions': [
+                    'Go to Settings → API Key Configuration and verify your API key is set',
+                    'Check that you selected the correct model for your available API keys',
+                    'Ensure your API key has sufficient credits/quota',
+                    'Try switching to a different AI model if you have multiple API keys configured'
+                ]
+            })
     
     # OAuth/Gmail Issues
     elif any(phrase in error_message_lower for phrase in ['oauth', 'gmail', 'credentials', 'token']):
@@ -5783,6 +6019,18 @@ def main():
                             st.session_state.persistent_session_token = session_token
                             st.session_state.persistent_user_id = new_user_id
                             
+                            # Map OAuth credentials from primary_setup_* to user_* format
+                            try:
+                                oauth_manager = st.session_state.oauth_manager
+                                # Load credentials with the primary_setup ID
+                                setup_credentials = oauth_manager.load_credentials(oauth_user_id)
+                                if setup_credentials:
+                                    # Save them with the proper user ID
+                                    oauth_manager.save_credentials(new_user_id, setup_credentials)
+                                    log.info(f"Mapped OAuth credentials from {oauth_user_id} to {new_user_id}")
+                            except Exception as e:
+                                log.warning(f"Could not map OAuth credentials: {e}")
+                            
                             # Clean up pending state
                             if 'pending_oauth_user_id' in st.session_state:
                                 del st.session_state.pending_oauth_user_id
@@ -5865,6 +6113,18 @@ def main():
                                     # ADDITIONAL: Store directly in session state for immediate persistence
                                     st.session_state.persistent_session_token = session_token
                                     st.session_state.persistent_user_id = user_id
+                                    
+                                    # Map OAuth credentials from login_* to user_* format
+                                    try:
+                                        oauth_manager = st.session_state.oauth_manager
+                                        # Load credentials with the login ID
+                                        login_credentials = oauth_manager.load_credentials(oauth_user_id)
+                                        if login_credentials:
+                                            # Save them with the proper user ID
+                                            oauth_manager.save_credentials(user_id, login_credentials)
+                                            log.info(f"Mapped OAuth credentials from {oauth_user_id} to {user_id}")
+                                    except Exception as e:
+                                        log.warning(f"Could not map OAuth credentials: {e}")
                                     
                                     # Clean up pending state
                                     if 'pending_oauth_user_id' in st.session_state:
@@ -6032,7 +6292,6 @@ def main():
     elif st.session_state.authentication_step == 'google_oauth':
         # OAuth is handled automatically via query params, show waiting message
         st.markdown("#  Authenticating...")
-        st.info(" Processing Google authentication, please wait...")
         st.markdown("If you're not redirected automatically, please check your popup blocker and try again.")
     elif st.session_state.authentication_step == 'select_user':
         show_user_selection()

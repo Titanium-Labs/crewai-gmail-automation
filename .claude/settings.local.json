@@ -17,7 +17,10 @@
       "Bash(dos2unix:*)",
       "Bash(true)",
       "Bash(grep:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(awk:*)",
+      "Bash(cp:*)",
+      "Bash(timeout 10 streamlit run streamlit_app.py)"
     ],
     "deny": []
   }
