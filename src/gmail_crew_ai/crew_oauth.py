@@ -148,10 +148,45 @@ class OAuth2GmailCrewAi:
             print(f"❌ Error fetching emails: {e}")
             return inputs
 
-    llm = LLM(
-        model="openai/gpt-4o-mini",
-        api_key=os.getenv("OPENAI_API_KEY"),
-    )
+    # Ensure environment variables are loaded with override
+    load_dotenv(override=True)
+    
+    # Get model from environment with smart fallback
+    model = os.getenv("MODEL", "anthropic/claude-4-sonnet")
+    
+    # Determine which API key to use based on model
+    if "anthropic" in model.lower():
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            print("⚠️  ANTHROPIC_API_KEY not found, falling back to OpenAI")
+            model = "openai/gpt-4o-mini"
+            api_key = os.getenv("OPENAI_API_KEY")
+        else:
+            # Validate Anthropic API key format
+            if not api_key.startswith("sk-ant-"):
+                print(f"⚠️  Invalid ANTHROPIC_API_KEY format (should start with 'sk-ant-'), falling back to OpenAI")
+                model = "openai/gpt-4o-mini"
+                api_key = os.getenv("OPENAI_API_KEY")
+    else:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print("⚠️  OPENAI_API_KEY not found, falling back to Claude")
+            model = "anthropic/claude-4-sonnet"
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+        else:
+            # Validate OpenAI API key format
+            if not api_key.startswith("sk-"):
+                print(f"⚠️  Invalid OPENAI_API_KEY format (should start with 'sk-'), falling back to Claude")
+                model = "anthropic/claude-4-sonnet"
+                api_key = os.getenv("ANTHROPIC_API_KEY")
+    
+    if not api_key:
+        raise ValueError("No valid API key found. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file.")
+    
+    print(f"🤖 Using model: {model}")
+    print(f"🔑 Using API key type: {'Anthropic' if 'anthropic' in model.lower() else 'OpenAI'}")
+    print(f"🔍 API key validation: {'✅ Valid format' if (api_key.startswith('sk-ant-') and 'anthropic' in model.lower()) or (api_key.startswith('sk-') and 'openai' in model.lower()) else '❌ Invalid format'}")
+    llm = LLM(model=model, api_key=api_key)
 
     @agent
     def categorizer(self) -> Agent:

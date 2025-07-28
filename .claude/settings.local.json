@@ -3,7 +3,21 @@
     "allow": [
       "Bash(find:*)",
       "WebFetch(domain:docs.anthropic.com)",
-      "Bash(gh pr:*)"
+      "Bash(gh pr:*)",
+      "Bash(python3 -m streamlit run:*)",
+      "Bash(ls:*)",
+      "Bash(chmod:*)",
+      "Bash(rm:*)",
+      "Bash(python test_oauth_fix.py:*)",
+      "Bash(python3:*)",
+      "Bash(source:*)",
+      "Bash(echo \"Environment variable set: $CURRENT_USER_ID\")",
+      "Bash(cat:*)",
+      "Bash(sed:*)",
+      "Bash(dos2unix:*)",
+      "Bash(true)",
+      "Bash(grep:*)",
+      "Bash(python:*)"
     ],
     "deny": []
   }

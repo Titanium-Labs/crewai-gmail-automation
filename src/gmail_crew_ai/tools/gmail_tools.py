@@ -1,311 +1,38 @@
-import imaplib
-import email
-from email.header import decode_header
-from typing import List, Tuple, Literal, Optional, Type, Dict, Any
-import re
-from bs4 import BeautifulSoup
-from crewai.tools import BaseTool
+"""Gmail tools using OAuth2 authentication - Deprecated in favor of gmail_oauth_tools.py
+
+This module is maintained for backward compatibility but all tools now use OAuth2.
+All IMAP/SMTP functionality has been removed and replaced with Gmail API calls.
+"""
+
 import os
+import json
+from typing import List, Tuple, Optional, Dict, Any, Type
 from pydantic import BaseModel, Field
-from crewai.tools import tool
-import time
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import base64
+from crewai.tools import BaseTool
 
-def decode_header_safe(header):
-    """
-    Safely decode email headers that might contain encoded words or non-ASCII characters.
-    """
-    if not header:
-        return ""
-    
-    try:
-        decoded_parts = []
-        for decoded_str, charset in decode_header(header):
-            if isinstance(decoded_str, bytes):
-                if charset:
-                    decoded_parts.append(decoded_str.decode(charset or 'utf-8', errors='replace'))
-                else:
-                    decoded_parts.append(decoded_str.decode('utf-8', errors='replace'))
-            else:
-                decoded_parts.append(str(decoded_str))
-        return ' '.join(decoded_parts)
-    except Exception as e:
-        # Fallback to raw header if decoding fails
-        return str(header)
+# Import OAuth2 tools
+from .gmail_oauth_tools import (
+    OAuth2GetUnreadEmailsTool,
+    OAuth2GmailOrganizeTool,
+    OAuth2GmailDeleteTool,
+    OAuth2SaveDraftTool,
+    OAuth2EmptyTrashTool,
+    OAuth2GetSentEmailsTool,
+    OAuth2UserPersonaAnalyzerTool,
+    OAuth2UserPersonaUpdaterTool,
+    OAuth2GmailToolBase
+)
 
-def clean_email_body(email_body: str, max_length: int = 300) -> str:
-    """
-    Clean the email body by removing HTML tags, excessive whitespace, and limit length.
-    """
-    if not email_body:
-        return ""
-    
-    try:
-        # Handle encoding issues by replacing problematic characters
-        email_body = email_body.encode('utf-8', errors='replace').decode('utf-8')
-        
-        soup = BeautifulSoup(email_body, "html.parser")
-        text = soup.get_text(separator=" ")  # Get text with spaces instead of <br/>
-    except Exception as e:
-        print(f"Error parsing HTML: {e}")
-        text = email_body  # Fallback to raw body if parsing fails
 
-    # Remove excessive whitespace and newlines
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    # Remove common problematic unicode characters
-    text = re.sub(r'[\u200c\u200d\u00ad]+', '', text)  # Remove zero-width and soft hyphen chars
-    text = re.sub(r'[^\x00-\x7F\u00A0-\u024F\u1E00-\u1EFF]+', ' ', text)  # Keep basic Latin chars
-    
-    # Truncate if too long, keeping first part which usually has most important content
-    if len(text) > max_length:
-        text = text[:max_length] + "... [Content truncated for processing]"
-    
-    return text
-
-class GmailToolBase(BaseTool):
-    """Base class for Gmail tools, handling connection and credentials."""
-    
-    name: str = "gmail_tool_base"
-    description: str = "Base class for Gmail tools"
-    
-    class Config:
-        arbitrary_types_allowed = True
-
-    email_address: Optional[str] = Field(None, description="Gmail email address")
-    app_password: Optional[str] = Field(None, description="Gmail app password")
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.email_address = os.environ.get("EMAIL_ADDRESS")
-        self.app_password = os.environ.get("APP_PASSWORD")
-
-        if not self.email_address or not self.app_password:
-            raise ValueError("EMAIL_ADDRESS and APP_PASSWORD must be set in the environment.")
-
-    def _connect(self):
-        """Connect to Gmail."""
-        try:
-            print(f"Connecting to Gmail with email: {self.email_address[:3]}...{self.email_address[-8:]}")
-            mail = imaplib.IMAP4_SSL("imap.gmail.com")
-            mail.login(self.email_address, self.app_password)
-            print("Successfully logged in to Gmail")
-            return mail
-        except Exception as e:
-            print(f"Error connecting to Gmail: {e}")
-            raise e
-
-    def _disconnect(self, mail):
-        """Disconnect from Gmail."""
-        try:
-            mail.close()
-            mail.logout()
-            print("Successfully disconnected from Gmail")
-        except:
-            pass
-
-    def _get_thread_messages(self, mail: imaplib.IMAP4_SSL, msg) -> List[str]:
-        """Get all messages in the thread by following References and In-Reply-To headers."""
-        thread_messages = []
-        
-        # Get message IDs from References and In-Reply-To headers
-        references = msg.get("References", "").split()
-        in_reply_to = msg.get("In-Reply-To", "").split()
-        message_ids = list(set(references + in_reply_to))  # Remove duplicates
-        
-        if message_ids:
-            # Search for messages with these Message-IDs
-            search_criteria = ' OR '.join(f'HEADER MESSAGE-ID "{mid}"' for mid in message_ids)
-            result, data = mail.search(None, search_criteria)
-            
-            if result == "OK":
-                thread_ids = data[0].split()
-                for thread_id in thread_ids:
-                    result, msg_data = mail.fetch(thread_id, "(RFC822)")
-                    if result == "OK":
-                        thread_msg = email.message_from_bytes(msg_data[0][1])
-                        # Extract body from thread message
-                        thread_body = self._extract_body(thread_msg)
-                        thread_messages.append(thread_body)
-        
-        return thread_messages
-
-    def _extract_body(self, msg) -> str:
-        """Extract body from an email message."""
-        body = ""
-        if msg.is_multipart():
-            for part in msg.walk():
-                content_type = part.get_content_type()
-                content_disposition = str(part.get("Content-Disposition"))
-
-                try:
-                    email_body = part.get_payload(decode=True).decode()
-                except:
-                    email_body = ""
-
-                if content_type == "text/plain" and "attachment" not in content_disposition:
-                    body += email_body
-                elif content_type == "text/html" and "attachment" not in content_disposition:
-                    body += clean_email_body(email_body)
-        else:
-            try:
-                body = clean_email_body(msg.get_payload(decode=True).decode())
-            except Exception as e:
-                body = f"Error decoding body: {e}"
-        return body
-
+# Legacy schemas - maintained for backward compatibility
 class GetUnreadEmailsSchema(BaseModel):
     """Schema for GetUnreadEmailsTool input."""
     limit: Optional[int] = Field(
         default=5,
         description="Maximum number of unread emails to retrieve. Defaults to 5.",
-        ge=1  # Ensures the limit is greater than or equal to 1
+        ge=1
     )
 
-class GetUnreadEmailsTool(GmailToolBase):
-    """Tool to get unread emails from Gmail."""
-    name: str = "get_unread_emails"
-    description: str = "Gets unread emails from Gmail"
-    args_schema: Type[BaseModel] = GetUnreadEmailsSchema
-    
-    def _run(self, limit: Optional[int] = 5) -> List[Tuple[str, str, str, str, Dict]]:
-        mail = self._connect()
-        try:
-            print("DEBUG: Connecting to Gmail...")
-            mail.select("INBOX")
-            result, data = mail.search(None, 'UNSEEN')
-            
-            print(f"DEBUG: Search result: {result}")
-            
-            if result != "OK":
-                print("DEBUG: Error searching for unseen emails")
-                return []
-            
-            email_ids = data[0].split()
-            print(f"DEBUG: Found {len(email_ids)} unread emails")
-            
-            if not email_ids:
-                print("DEBUG: No unread emails found.")
-                return []
-            
-            # Process all emails first to get their dates for sorting
-            print(f"DEBUG: Processing {len(email_ids)} emails for chronological sorting")
-            
-            emails_with_dates = []
-            for i, email_id in enumerate(email_ids):
-                print(f"DEBUG: Processing email {i+1}/{len(email_ids)}")
-                result, msg_data = mail.fetch(email_id, "(RFC822)")
-                if result != "OK":
-                    print(f"Error fetching email {email_id}:", result)
-                    continue
-
-                raw_email = msg_data[0][1]
-                msg = email.message_from_bytes(raw_email)
-
-                # Decode headers properly (handles encoded characters)
-                subject = decode_header_safe(msg["Subject"])
-                sender = decode_header_safe(msg["From"])
-                
-                # Extract and standardize the date
-                date_str = msg.get("Date", "")
-                received_date = self._parse_email_date(date_str)
-                
-                # Get the current message body (limit to 1500 chars to prevent context overflow)
-                current_body = self._extract_body(msg)
-                if len(current_body) > 1500:
-                    current_body = current_body[:1500] + "... [Message truncated]"
-                
-                # Get thread messages (limit to 2 previous messages max, 500 chars each)
-                thread_messages = self._get_thread_messages(mail, msg)
-                if thread_messages:
-                    # Limit to 2 most recent thread messages
-                    thread_messages = thread_messages[:2]
-                    # Truncate each thread message
-                    thread_messages = [msg[:500] + "... [Truncated]" if len(msg) > 500 else msg for msg in thread_messages]
-                
-                # Combine current message with limited thread history
-                if thread_messages:
-                    full_body = current_body + "\n\n--- Previous Messages (Limited) ---\n" + "\n".join(thread_messages)
-                else:
-                    full_body = current_body
-                
-                # Final length check - ensure total doesn't exceed 2500 chars
-                if len(full_body) > 2500:
-                    full_body = full_body[:2500] + "... [Content truncated for processing]"
-                
-                # Get thread metadata
-                thread_info = {
-                    'message_id': msg.get('Message-ID', ''),
-                    'in_reply_to': msg.get('In-Reply-To', ''),
-                    'references': msg.get('References', ''),
-                    'date': received_date,  # Use standardized date
-                    'raw_date': date_str,   # Keep original date string
-                    'email_id': email_id.decode('utf-8')
-                }
-
-                # Add a clear date indicator in the body for easier extraction
-                full_body = f"EMAIL DATE: {received_date}\n\n{full_body}"
-                
-                # Print the structure of what we're appending
-                print(f"DEBUG: Email tuple structure: subject={subject}, sender={sender}, body_length={len(full_body)}, email_id={email_id.decode('utf-8')}, thread_info_keys={thread_info.keys()}")
-                
-                email_tuple = (subject, sender, full_body, email_id.decode('utf-8'), thread_info)
-                
-                # Parse date for sorting
-                try:
-                    from email.utils import parsedate_to_datetime
-                    if date_str:
-                        parsed_date = parsedate_to_datetime(date_str)
-                        sort_timestamp = parsed_date.timestamp()
-                    else:
-                        sort_timestamp = 0
-                except Exception:
-                    sort_timestamp = 0
-                
-                emails_with_dates.append((email_tuple, sort_timestamp))
-            
-            # Sort by timestamp in descending order (newest first)
-            emails_with_dates.sort(key=lambda x: x[1], reverse=True)
-            
-            # Apply limit after sorting to ensure we get the newest emails
-            emails_with_dates = emails_with_dates[:limit]
-            
-            # Extract just the email data (without the timestamp)
-            emails = [email_tuple for email_tuple, _ in emails_with_dates]
-            
-            print(f"DEBUG: Returning {len(emails)} email tuples in chronological descending order")
-            return emails
-        except Exception as e:
-            print(f"DEBUG: Exception in GetUnreadEmailsTool: {e}")
-            import traceback
-            traceback.print_exc()
-            return []
-        finally:
-            self._disconnect(mail)
-
-    def _parse_email_date(self, date_str: str) -> str:
-        """
-        Parse email date string into a standardized format.
-        Returns ISO format date string (YYYY-MM-DD) or empty string if parsing fails.
-        """
-        if not date_str:
-            return ""
-        
-        try:
-            # Try various date formats commonly found in emails
-            # Remove timezone name if present (like 'EDT', 'PST')
-            date_str = re.sub(r'\s+\([A-Z]{3,4}\)', '', date_str)
-            
-            # Parse with email.utils
-            parsed_date = email.utils.parsedate_to_datetime(date_str)
-            if parsed_date:
-                return parsed_date.strftime("%Y-%m-%d")
-        except Exception as e:
-            print(f"Error parsing date '{date_str}': {e}")
-        
-        return ""
 
 class SaveDraftSchema(BaseModel):
     """Schema for SaveDraftTool input."""
@@ -314,183 +41,6 @@ class SaveDraftSchema(BaseModel):
     recipient: str = Field(..., description="Recipient email address")
     thread_info: Optional[Dict[str, Any]] = Field(None, description="Thread information for replies")
 
-class SaveDraftTool(BaseTool):
-    """Tool to save an email as a draft using IMAP."""
-    name: str = "save_email_draft"
-    description: str = "Saves an email as a draft in Gmail"
-    args_schema: Type[BaseModel] = SaveDraftSchema
-
-    def _format_body(self, body: str) -> str:
-        """Format the email body."""
-        return body
-
-    def _connect(self):
-        """Connect to Gmail using IMAP."""
-        # Get email credentials from environment
-        email_address = os.environ.get('EMAIL_ADDRESS')
-        app_password = os.environ.get('APP_PASSWORD')
-        
-        if not email_address or not app_password:
-            raise ValueError("EMAIL_ADDRESS or APP_PASSWORD environment variables not set")
-        
-        # Connect to Gmail's IMAP server
-        mail = imaplib.IMAP4_SSL('imap.gmail.com')
-        print(f"Connecting to Gmail with email: {email_address[:3]}...{email_address[-10:]}")
-        mail.login(email_address, app_password)
-        return mail, email_address
-
-    def _disconnect(self, mail):
-        """Disconnect from Gmail."""
-        try:
-            mail.logout()
-        except:
-            pass
-
-    def _check_drafts_folder(self, mail):
-        """Check available mailboxes to find the drafts folder."""
-        print("Checking available mailboxes...")
-        result, mailboxes = mail.list()
-        if result == 'OK':
-            drafts_folders = []
-            for mailbox in mailboxes:
-                if b'Drafts' in mailbox or b'Draft' in mailbox:
-                    drafts_folders.append(mailbox.decode())
-                    print(f"Found drafts folder: {mailbox.decode()}")
-            return drafts_folders
-        return []
-
-    def _verify_draft_saved(self, mail, subject, recipient):
-        """Verify if the draft was actually saved by searching for it."""
-        try:
-            # Try different drafts folder names
-            drafts_folders = [
-                '"[Gmail]/Drafts"', 
-                'Drafts',
-                'DRAFTS',
-                '"[Google Mail]/Drafts"',
-                '[Gmail]/Drafts'
-            ]
-            
-            for folder in drafts_folders:
-                try:
-                    print(f"Checking folder: {folder}")
-                    result, _ = mail.select(folder, readonly=True)
-                    if result != 'OK':
-                        continue
-                        
-                    # Search for drafts with this subject
-                    search_criteria = f'SUBJECT "{subject}"'
-                    result, data = mail.search(None, search_criteria)
-                    
-                    if result == 'OK' and data[0]:
-                        draft_count = len(data[0].split())
-                        print(f"Found {draft_count} drafts matching subject '{subject}' in folder {folder}")
-                        return True, folder
-                    else:
-                        print(f"No drafts found matching subject '{subject}' in folder {folder}")
-                except Exception as e:
-                    print(f"Error checking folder {folder}: {e}")
-                    continue
-                    
-            return False, None
-        except Exception as e:
-            print(f"Error verifying draft: {e}")
-            return False, None
-
-    def _run(self, subject: str, body: str, recipient: str, thread_info: Optional[Dict[str, Any]] = None) -> str:
-        try:
-            mail, email_address = self._connect()
-            
-            # Check available drafts folders
-            drafts_folders = self._check_drafts_folder(mail)
-            print(f"Available drafts folders: {drafts_folders}")
-            
-            # Try with quoted folder name first
-            drafts_folder = '"[Gmail]/Drafts"'
-            print(f"Selecting drafts folder: {drafts_folder}")
-            result, _ = mail.select(drafts_folder)
-            
-            # If that fails, try without quotes
-            if result != 'OK':
-                drafts_folder = '[Gmail]/Drafts'
-                print(f"First attempt failed. Trying: {drafts_folder}")
-                result, _ = mail.select(drafts_folder)
-                
-            # If that also fails, try just 'Drafts'
-            if result != 'OK':
-                drafts_folder = 'Drafts'
-                print(f"Second attempt failed. Trying: {drafts_folder}")
-                result, _ = mail.select(drafts_folder)
-                
-            if result != 'OK':
-                return f"Error: Could not select drafts folder. Available folders: {drafts_folders}"
-                
-            print(f"Successfully selected drafts folder: {drafts_folder}")
-            
-            # Format body and add signature
-            body_with_signature = self._format_body(body)
-            
-            # Create the email message
-            message = email.message.EmailMessage()
-            message["From"] = email_address
-            message["To"] = recipient
-            message["Subject"] = subject
-            message.set_content(body_with_signature)
-            print(f"Created message with subject: {subject}")
-
-            # Add thread headers if this is a reply
-            if thread_info:
-                # References header should include all previous message IDs
-                references = []
-                if thread_info.get('references'):
-                    references.extend(thread_info['references'].split())
-                if thread_info.get('message_id'):
-                    references.append(thread_info['message_id'])
-                
-                if references:
-                    message["References"] = " ".join(references)
-                
-                # In-Reply-To should point to the immediate parent message
-                if thread_info.get('message_id'):
-                    message["In-Reply-To"] = thread_info['message_id']
-
-                # Make sure subject has "Re: " prefix
-                if not subject.lower().startswith('re:'):
-                    message["Subject"] = f"Re: {subject}"
-                    
-                print(f"Added thread information for reply")
-
-            # Save to drafts
-            print(f"Attempting to save draft to {drafts_folder}...")
-            date = imaplib.Time2Internaldate(time.time())
-            result, data = mail.append(drafts_folder, '\\Draft', date, message.as_bytes())
-            
-            if result != 'OK':
-                return f"Error saving draft: {result}, {data}"
-                
-            print(f"Draft save attempt result: {result}")
-            
-            # Verify the draft was actually saved
-            verified, folder = self._verify_draft_saved(mail, subject, recipient)
-            
-            if verified:
-                return f"VERIFIED: Draft email saved with subject: '{subject}' in folder {folder}"
-            else:
-                # Try Gmail's API approach as a fallback
-                try:
-                    # Try saving directly to All Mail and flagging as draft
-                    result, data = mail.append('[Gmail]/All Mail', '\\Draft', date, message.as_bytes())
-                    if result == 'OK':
-                        return f"Draft saved to All Mail with subject: '{subject}' (flagged as draft)"
-                    else:
-                        return f"WARNING: Draft save attempt returned {result}, but verification failed. Please check your Gmail Drafts folder."
-                except Exception as e:
-                    return f"WARNING: Draft may not have been saved properly: {str(e)}"
-
-        except Exception as e:
-            return f"Error saving draft: {str(e)}"
-        finally:
-            self._disconnect(mail)
 
 class GmailOrganizeSchema(BaseModel):
     """Schema for GmailOrganizeTool input."""
@@ -498,194 +48,229 @@ class GmailOrganizeSchema(BaseModel):
     category: str = Field(..., description="Category assigned by agent (Urgent/Response Needed/etc)")
     priority: str = Field(..., description="Priority level (High/Medium/Low)")
     should_star: bool = Field(default=False, description="Whether to star the email")
-    labels: List[str] = Field(default_list=[], description="Labels to apply")
+    labels: List[str] = Field(default_factory=list, description="Labels to apply")
 
-class GmailOrganizeTool(GmailToolBase):
-    """Tool to organize emails based on agent categorization."""
-    name: str = "organize_email"
-    description: str = "Organizes emails using Gmail's priority features based on category and priority"
-    args_schema: Type[BaseModel] = GmailOrganizeSchema
-
-    def _run(self, email_id: str, category: str, priority: str, should_star: bool = False, labels: List[str] = None) -> str:
-        """Organize an email with the specified parameters."""
-        if labels is None:
-            # Provide a default empty list to avoid validation errors
-            labels = []
-        
-        print(f"Organizing email {email_id} with category {category}, priority {priority}, star={should_star}, labels={labels}")
-        
-        mail = self._connect()
-        try:
-            # Select inbox to ensure we can access the email
-            mail.select("INBOX")
-            
-            # Apply organization based on category and priority
-            if category == "Urgent Response Needed" and priority == "High":
-                # Star the email
-                if should_star:
-                    mail.store(email_id, '+FLAGS', '\\Flagged')
-                
-                # Mark as important
-                mail.store(email_id, '+FLAGS', '\\Important')
-                
-                # Apply URGENT label if it doesn't exist
-                if "URGENT" not in labels:
-                    labels.append("URGENT")
-
-            # Apply all specified labels
-            for label in labels:
-                try:
-                    # Create label if it doesn't exist
-                    mail.create(label)
-                except:
-                    pass  # Label might already exist
-                
-                # Apply label
-                mail.store(email_id, '+X-GM-LABELS', label)
-
-            return f"Email organized: Starred={should_star}, Labels={labels}"
-
-        except Exception as e:
-            return f"Error organizing email: {e}"
-        finally:
-            self._disconnect(mail)
 
 class GmailDeleteSchema(BaseModel):
     """Schema for GmailDeleteTool input."""
     email_id: str = Field(..., description="Email ID to delete")
     reason: str = Field(..., description="Reason for deletion")
 
+
+# Legacy tool classes that now wrap OAuth2 implementations
+class GmailToolBase(BaseTool):
+    """Base class for Gmail tools - now uses OAuth2."""
+    
+    name: str = "gmail_tool_base"
+    description: str = "Base class for Gmail tools"
+    
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Check for OAuth2 user ID, with auto-detection fallback
+        self.user_id = os.environ.get("CURRENT_USER_ID") or self._get_primary_user_id()
+        if not self.user_id:
+            raise ValueError("No authenticated user found. Please authenticate first or set CURRENT_USER_ID environment variable.")
+    
+    def _get_primary_user_id(self) -> Optional[str]:
+        """Auto-detect primary user ID from users.json file."""
+        try:
+            # Try to load users.json to find primary user
+            if os.path.exists('users.json'):
+                with open('users.json', 'r') as f:
+                    users = json.loads(f.read())
+                
+                # Find primary user
+                for user_id, user_data in users.items():
+                    if user_data.get('is_primary', False):
+                        print(f"Auto-detected primary user: {user_id} ({user_data.get('email', 'unknown')})")
+                        return user_id
+                
+                # If no primary user, get the first approved user
+                for user_id, user_data in users.items():
+                    if user_data.get('status') == 'approved':
+                        print(f"Using first approved user: {user_id} ({user_data.get('email', 'unknown')})")
+                        return user_id
+        except Exception as e:
+            print(f"Error auto-detecting user: {e}")
+        
+        return None
+
+
+class GetUnreadEmailsTool(GmailToolBase):
+    """Tool to get unread emails from Gmail - now uses OAuth2."""
+    name: str = "get_unread_emails"
+    description: str = "Gets unread emails from Gmail using OAuth2 authentication"
+    args_schema: Type[BaseModel] = GetUnreadEmailsSchema
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Create OAuth2 tool instance
+        self._oauth_tool = OAuth2GetUnreadEmailsTool(user_id=self.user_id)
+    
+    def _run(self, limit: Optional[int] = 5) -> List[Tuple[str, str, str, str, Dict]]:
+        """Get unread emails using OAuth2."""
+        # Map legacy limit to OAuth2 max_emails parameter
+        return self._oauth_tool._run(max_emails=limit)
+
+
+class SaveDraftTool(BaseTool):
+    """Tool to save an email as a draft - now uses OAuth2."""
+    name: str = "save_email_draft"
+    description: str = "Saves an email as a draft in Gmail using OAuth2 authentication"
+    args_schema: Type[BaseModel] = SaveDraftSchema
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.user_id = os.environ.get("CURRENT_USER_ID") or self._get_primary_user_id()
+        if not self.user_id:
+            raise ValueError("No authenticated user found. Please authenticate first or set CURRENT_USER_ID environment variable.")
+        self._oauth_tool = OAuth2SaveDraftTool(user_id=self.user_id)
+    
+    def _get_primary_user_id(self) -> Optional[str]:
+        """Auto-detect primary user ID from users.json file."""
+        try:
+            if os.path.exists('users.json'):
+                with open('users.json', 'r') as f:
+                    users = json.loads(f.read())
+                for user_id, user_data in users.items():
+                    if user_data.get('is_primary', False):
+                        return user_id
+                for user_id, user_data in users.items():
+                    if user_data.get('status') == 'approved':
+                        return user_id
+        except Exception:
+            pass
+        return None
+
+    def _run(self, subject: str, body: str, recipient: str, thread_info: Optional[Dict[str, Any]] = None) -> str:
+        """Save draft using OAuth2."""
+        # Extract in_reply_to from thread_info if available
+        in_reply_to = None
+        if thread_info and thread_info.get('message_id'):
+            in_reply_to = thread_info['message_id']
+        
+        return self._oauth_tool._run(
+            recipient=recipient,
+            subject=subject,
+            body=body,
+            in_reply_to=in_reply_to
+        )
+
+
+class GmailOrganizeTool(GmailToolBase):
+    """Tool to organize emails - now uses OAuth2."""
+    name: str = "organize_email"
+    description: str = "Organizes emails using Gmail's features via OAuth2 authentication"
+    args_schema: Type[BaseModel] = GmailOrganizeSchema
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._oauth_tool = OAuth2GmailOrganizeTool(user_id=self.user_id)
+
+    def _run(self, email_id: str, category: str, priority: str, should_star: bool = False, labels: List[str] = None) -> str:
+        """Organize an email using OAuth2."""
+        if labels is None:
+            labels = []
+        
+        # Map legacy parameters to OAuth2 parameters
+        labels_to_add = labels.copy()
+        
+        # Add category/priority based labels
+        if category == "Urgent Response Needed" and priority == "High":
+            if "URGENT" not in labels_to_add:
+                labels_to_add.append("URGENT")
+        
+        return self._oauth_tool._run(
+            email_id=email_id,
+            labels_to_add=labels_to_add,
+            star=should_star,
+            mark_read=True  # Mark all processed emails as read
+        )
+
+
 class GmailDeleteTool(BaseTool):
-    """Tool to delete an email using IMAP."""
+    """Tool to delete an email - now uses OAuth2."""
     name: str = "delete_email"
-    description: str = "Deletes an email from Gmail"
+    description: str = "Deletes an email from Gmail using OAuth2 authentication"
+    args_schema: Type[BaseModel] = GmailDeleteSchema
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.user_id = os.environ.get("CURRENT_USER_ID") or self._get_primary_user_id()
+        if not self.user_id:
+            raise ValueError("No authenticated user found. Please authenticate first or set CURRENT_USER_ID environment variable.")
+        self._oauth_tool = OAuth2GmailDeleteTool(user_id=self.user_id)
+    
+    def _get_primary_user_id(self) -> Optional[str]:
+        """Auto-detect primary user ID from users.json file."""
+        try:
+            if os.path.exists('users.json'):
+                with open('users.json', 'r') as f:
+                    users = json.loads(f.read())
+                for user_id, user_data in users.items():
+                    if user_data.get('is_primary', False):
+                        return user_id
+                for user_id, user_data in users.items():
+                    if user_data.get('status') == 'approved':
+                        return user_id
+        except Exception:
+            pass
+        return None
     
     def _run(self, email_id: str, reason: str) -> str:
-        """
-        Delete an email by ID.
-        Parameters:
-            email_id: The email ID to delete
-            reason: The reason for deletion (for logging)
-        """
-        try:
-            # Validate inputs - Add this validation
-            if not email_id or not isinstance(email_id, str):
-                return f"Error: Invalid email_id format: {email_id}"
-            
-            if not reason or not isinstance(reason, str):
-                return f"Error: Invalid reason format: {reason}"
-                
-            mail = self._connect()
-            try:
-                mail.select("INBOX")
-                
-                # First verify the email exists and get its details for logging
-                result, data = mail.fetch(email_id, "(RFC822)")
-                if result != "OK" or not data or data[0] is None:
-                    return f"Error: Email with ID {email_id} not found"
-                    
-                msg = email.message_from_bytes(data[0][1])
-                subject = decode_header_safe(msg["Subject"])
-                sender = decode_header_safe(msg["From"])
-                
-                # Move to Trash
-                mail.store(email_id, '+X-GM-LABELS', '\\Trash')
-                mail.store(email_id, '-X-GM-LABELS', '\\Inbox')
-                
-                return f"Email deleted: '{subject}' from {sender}. Reason: {reason}"
-            except Exception as e:
-                return f"Error deleting email: {e}"
-            finally:
-                self._disconnect(mail)
+        """Delete an email using OAuth2."""
+        # OAuth2 tool doesn't use reason parameter, but we log it
+        print(f"Deleting email {email_id}. Reason: {reason}")
+        result = self._oauth_tool._run(email_id=email_id)
+        
+        # Append reason to result for backward compatibility
+        if "Successfully" in result:
+            return f"{result}. Reason: {reason}"
+        return result
 
-        except Exception as e:
-            return f"Error deleting email: {str(e)}"
 
 class EmptyTrashTool(BaseTool):
-    """Tool to empty Gmail trash."""
+    """Tool to empty Gmail trash - now uses OAuth2."""
     name: str = "empty_gmail_trash"
-    description: str = "Empties the Gmail trash folder to free up space"
+    description: str = "Empties the Gmail trash folder using OAuth2 authentication"
 
-    def _connect(self):
-        """Connect to Gmail using IMAP."""
-        # Get email credentials from environment
-        email_address = os.environ.get('EMAIL_ADDRESS')
-        app_password = os.environ.get('APP_PASSWORD')
-        
-        if not email_address or not app_password:
-            raise ValueError("EMAIL_ADDRESS or APP_PASSWORD environment variables not set")
-        
-        # Connect to Gmail's IMAP server
-        mail = imaplib.IMAP4_SSL('imap.gmail.com')
-        print(f"Connecting to Gmail with email: {email_address[:3]}...{email_address[-10:]}")
-        mail.login(email_address, app_password)
-        return mail
-
-    def _disconnect(self, mail):
-        """Disconnect from Gmail."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.user_id = os.environ.get("CURRENT_USER_ID") or self._get_primary_user_id()
+        if not self.user_id:
+            raise ValueError("No authenticated user found. Please authenticate first or set CURRENT_USER_ID environment variable.")
+        self._oauth_tool = OAuth2EmptyTrashTool(user_id=self.user_id)
+    
+    def _get_primary_user_id(self) -> Optional[str]:
+        """Auto-detect primary user ID from users.json file."""
         try:
-            mail.logout()
-        except:
+            if os.path.exists('users.json'):
+                with open('users.json', 'r') as f:
+                    users = json.loads(f.read())
+                for user_id, user_data in users.items():
+                    if user_data.get('is_primary', False):
+                        return user_id
+                for user_id, user_data in users.items():
+                    if user_data.get('status') == 'approved':
+                        return user_id
+        except Exception:
             pass
+        return None
     
     def _run(self) -> str:
-        """Empty the Gmail trash folder."""
-        try:
-            mail = self._connect()
-            
-            # Try different trash folder names (Gmail can have different naming conventions)
-            trash_folders = [
-                '"[Gmail]/Trash"',
-                '[Gmail]/Trash',
-                'Trash',
-                '"[Google Mail]/Trash"',
-                '[Google Mail]/Trash'
-            ]
-            
-            success = False
-            trash_folder_used = None
-            
-            for folder in trash_folders:
-                try:
-                    print(f"Attempting to select trash folder: {folder}")
-                    result, data = mail.select(folder)
-                    
-                    if result == 'OK':
-                        trash_folder_used = folder
-                        print(f"Successfully selected trash folder: {folder}")
-                        
-                        # Search for all messages in trash
-                        result, data = mail.search(None, 'ALL')
-                        
-                        if result == 'OK':
-                            email_ids = data[0].split()
-                            count = len(email_ids)
-                            
-                            if count == 0:
-                                print("No messages found in trash.")
-                                return "Trash is already empty. No messages to delete."
-                            
-                            print(f"Found {count} messages in trash.")
-                            
-                            # Delete all messages in trash
-                            for email_id in email_ids:
-                                mail.store(email_id, '+FLAGS', '\\Deleted')
-                            
-                            # Permanently remove messages marked for deletion
-                            mail.expunge()
-                            success = True
-                            break
-                        
-                except Exception as e:
-                    print(f"Error accessing trash folder {folder}: {e}")
-                    continue
-            
-            if success:
-                return f"Successfully emptied Gmail trash folder ({trash_folder_used}). Deleted {count} messages."
-            else:
-                return "Could not empty trash. No trash folder found or accessible."
+        """Empty Gmail trash using OAuth2."""
+        return self._oauth_tool._run()
 
-        except Exception as e:
-            return f"Error emptying trash: {str(e)}"
-        finally:
-            self._disconnect(mail)
+
+# Export all tools for backward compatibility
+__all__ = [
+    'GetUnreadEmailsTool',
+    'SaveDraftTool',
+    'GmailOrganizeTool',
+    'GmailDeleteTool',
+    'EmptyTrashTool',
+    'GmailToolBase'
+]

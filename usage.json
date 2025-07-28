@@ -26,6 +26,15 @@
       "plan_type": "free",
       "created_at": "2025-07-24T14:05:46.645304",
       "updated_at": "2025-07-24T16:31:13.490870"
+    },
+    "2025-07-27": {
+      "user_id": "user_zhQ7K854ngI",
+      "date": "2025-07-27",
+      "emails_processed": 15,
+      "daily_limit": 999999,
+      "plan_type": "free",
+      "created_at": "2025-07-27T16:39:25.244629",
+      "updated_at": "2025-07-27T16:43:59.806387"
     }
   }
 }

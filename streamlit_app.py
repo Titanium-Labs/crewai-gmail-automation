@@ -221,13 +221,13 @@ class SessionManager:
         components.html(js_code, height=0)
     
     def get_browser_session(self) -> Optional[str]:
-        """Get session token from browser storage or session state with improved reliability."""
-        # First check if we have it in current session state
+        """Get session token using a more reliable approach."""
+        # Strategy 1: Check Streamlit session state first
         if 'persistent_session_token' in st.session_state:
             log.debug("Found session token in Streamlit session state")
             return st.session_state.persistent_session_token
         
-        # Check URL parameters first (this handles redirects from cookie reading)
+        # Strategy 2: Check URL parameters (from redirects)
         query_params = st.query_params
         if 'session_token' in query_params:
             session_token = query_params['session_token']
@@ -238,16 +238,45 @@ class SessionManager:
             try:
                 del st.query_params['session_token']
             except:
-                pass  # Ignore errors when clearing query params
+                pass
             return session_token
         
-        # Try to read from browser cookies using JavaScript (only once per session)
+        # Strategy 3: Try to find active session by checking all sessions for this user
+        # This is a fallback that works without cookies
+        try:
+            sessions = self.load_sessions()
+            current_time = datetime.now()
+            
+            # Look for any non-expired session for the primary user
+            for session_token, session_data in sessions.items():
+                try:
+                    expires_at = datetime.fromisoformat(session_data['expires_at'])
+                    user_id = session_data.get('user_id')
+                    
+                    if current_time < expires_at and user_id:
+                        # Check if this user is approved and primary
+                        user_manager = st.session_state.get('user_manager')
+                        if user_manager:
+                            users = user_manager.load_users()
+                            user_data = users.get(user_id, {})
+                            
+                            if (user_data.get('status') == 'approved' and 
+                                user_data.get('is_primary', False)):
+                                log.debug(f"Found active session for primary user {user_id}")
+                                # Store in session state for immediate use
+                                st.session_state.persistent_session_token = session_token
+                                return session_token
+                except Exception:
+                    continue
+        except Exception as e:
+            log.debug(f"Error in fallback session discovery: {e}")
+        
+        # Strategy 4: Use browser cookies only as final fallback
         if not st.session_state.get('cookie_check_attempted', False):
             st.session_state.cookie_check_attempted = True
             
             js_code = """
             <script>
-            // Try to read session cookie and redirect if found
             const cookies = document.cookie.split(';');
             let sessionToken = null;
             
@@ -260,17 +289,15 @@ class SessionManager:
             }
             
             if (sessionToken) {
-                console.log("Found session cookie, redirecting with token");
+                console.log("Found session cookie, redirecting");
                 const currentUrl = new URL(window.location.href);
                 currentUrl.searchParams.set('session_token', sessionToken);
                 window.location.href = currentUrl.href;
-            } else {
-                console.log("No session cookie found");
             }
             </script>
             """
             components.html(js_code, height=0)
-            log.debug("Attempting to read session cookie from browser")
+            log.debug("Attempting cookie-based session recovery")
         
         return None
     
@@ -461,88 +488,157 @@ def inject_shadcn_css():
         }
     }
 
-    /* Custom tooltip styling for filter buttons */
-    .stButton > button[title="Unread emails (is:unread)"],
-    .stButton > button[title="Starred emails (is:starred)"],
-    .stButton > button[title="Emails with attachments (has:attachment)"],
-    .stButton > button[title="Important emails (is:important)"],
-    .stButton > button[title="Today's emails (newer_than:1d)"],
-    .stButton > button[title="Primary category (category:primary)"] {
+    /* Enhanced tooltip styling for better positioning and visibility */
+    .stButton > button[title*="emails"],
+    .stButton > button[title*="Start"],
+    .stButton > button[title*="Stop"],
+    .stButton > button[title*="Running"],
+    .stButton > button[title*="Processing"],
+    .stButton > button[title*="Logout"],
+    .stButton > button[title*="Clear"],
+    .stButton > button[title*="Refresh"],
+    .stButton > button[title*="Remove"],
+    .stButton > button[title*="Rebuild"],
+    .stButton > button[title*="Update"],
+    .stButton > button[title*="Download"],
+    .stButton > button[title*="View"] {
         position: relative !important;
-    }
-
-    /* Hide default browser tooltips for filter buttons */
-    .stButton > button[title="Unread emails (is:unread)"],
-    .stButton > button[title="Starred emails (is:starred)"],
-    .stButton > button[title="Emails with attachments (has:attachment)"],
-    .stButton > button[title="Important emails (is:important)"],
-    .stButton > button[title="Today's emails (newer_than:1d)"],
-    .stButton > button[title="Primary category (category:primary)"] {
         /* Disable default browser tooltips */
         pointer-events: auto !important;
     }
 
-    /* Completely disable default tooltips on these buttons */
-    .stButton > button[title="Unread emails (is:unread)"]:hover,
-    .stButton > button[title="Starred emails (is:starred)"]:hover,
-    .stButton > button[title="Emails with attachments (has:attachment)"]:hover,
-    .stButton > button[title="Important emails (is:important)"]:hover,
-    .stButton > button[title="Today's emails (newer_than:1d)"]:hover,
-    .stButton > button[title="Primary category (category:primary)"]:hover {
-        /* Hide default tooltips but keep our custom ones */
-        position: relative !important;
-    }
-
-    /* Create custom tooltips that appear well above the buttons with generous spacing */
-    .stButton > button[title="Unread emails (is:unread)"]:hover::after,
-    .stButton > button[title="Starred emails (is:starred)"]:hover::after,
-    .stButton > button[title="Emails with attachments (has:attachment)"]:hover::after,
-    .stButton > button[title="Important emails (is:important)"]:hover::after,
-    .stButton > button[title="Today's emails (newer_than:1d)"]:hover::after,
-    .stButton > button[title="Primary category (category:primary)"]:hover::after {
+    /* Custom tooltips that intelligently position to avoid overlapping */
+    .stButton > button[title*="emails"]:hover::after,
+    .stButton > button[title*="Start"]:hover::after,
+    .stButton > button[title*="Stop"]:hover::after,
+    .stButton > button[title*="Running"]:hover::after,
+    .stButton > button[title*="Processing"]:hover::after,
+    .stButton > button[title*="Logout"]:hover::after,
+    .stButton > button[title*="Clear"]:hover::after,
+    .stButton > button[title*="Refresh"]:hover::after,
+    .stButton > button[title*="Remove"]:hover::after,
+    .stButton > button[title*="Rebuild"]:hover::after,
+    .stButton > button[title*="Update"]:hover::after,
+    .stButton > button[title*="Download"]:hover::after,
+    .stButton > button[title*="View"]:hover::after {
         content: attr(title) !important;
         position: absolute !important;
-        bottom: 180% !important; /* Position much higher above the button */
+        bottom: calc(100% + 15px) !important; /* Always position above with clear gap */
         left: 50% !important;
         transform: translateX(-50%) !important;
-        background-color: rgba(0, 0, 0, 0.95) !important;
-        color: white !important;
-        padding: 10px 14px !important;
-        border-radius: 8px !important;
-        font-size: 12px !important;
-        line-height: 1.3 !important;
+        background: linear-gradient(135deg, rgba(40, 44, 52, 0.98), rgba(33, 37, 43, 0.98)) !important;
+        color: #ffffff !important;
+        padding: 8px 12px !important;
+        border-radius: 6px !important;
+        font-size: 11px !important;
+        line-height: 1.4 !important;
         white-space: nowrap !important;
-        z-index: 99999 !important; /* Ensure tooltips appear above everything */
-        font-weight: 500 !important;
-        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3) !important;
+        max-width: 200px !important;
+        text-align: center !important;
+        z-index: 999999 !important; /* Highest z-index to ensure visibility */
+        font-weight: 400 !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
         pointer-events: none !important;
         opacity: 0 !important;
-        animation: tooltipFadeIn 0.2s ease-in-out forwards !important;
-        margin-bottom: 10px !important; /* Additional spacing buffer */
+        animation: smoothTooltipFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0.5s forwards !important;
+        /* Prevent tooltip from being clipped */
+        clip-path: none !important;
+        overflow: visible !important;
     }
 
-    /* Tooltip arrow pointing down to the button with increased spacing */
-    .stButton > button[title="Unread emails (is:unread)"]:hover::before,
-    .stButton > button[title="Starred emails (is:starred)"]:hover::before,
-    .stButton > button[title="Emails with attachments (has:attachment)"]:hover::before,
-    .stButton > button[title="Important emails (is:important)"]:hover::before,
-    .stButton > button[title="Today's emails (newer_than:1d)"]:hover::before,
-    .stButton > button[title="Primary category (category:primary)"]:hover::before {
+    /* Smart positioning for tooltips near screen edges */
+    .stButton > button[title*="emails"]:hover::after {
+        /* For filter buttons, ensure they don't overflow */
+        white-space: nowrap !important;
+        max-width: 180px !important;
+    }
+
+    /* Responsive tooltip positioning for mobile/small screens */
+    @media (max-width: 768px) {
+        .stButton > button[title*="emails"]:hover::after,
+        .stButton > button[title*="Start"]:hover::after,
+        .stButton > button[title*="Stop"]:hover::after,
+        .stButton > button[title*="Running"]:hover::after,
+        .stButton > button[title*="Processing"]:hover::after,
+        .stButton > button[title*="Logout"]:hover::after,
+        .stButton > button[title*="Clear"]:hover::after,
+        .stButton > button[title*="Refresh"]:hover::after,
+        .stButton > button[title*="Remove"]:hover::after,
+        .stButton > button[title*="Rebuild"]:hover::after,
+        .stButton > button[title*="Update"]:hover::after,
+        .stButton > button[title*="Download"]:hover::after,
+        .stButton > button[title*="View"]:hover::after {
+            /* On small screens, position tooltips more carefully */
+            max-width: 160px !important;
+            font-size: 10px !important;
+            padding: 6px 8px !important;
+            bottom: calc(100% + 12px) !important;
+            /* Prevent overflow on small screens */
+            white-space: normal !important;
+            word-wrap: break-word !important;
+        }
+    }
+
+    /* Special positioning for buttons in columns to prevent overflow */
+    [data-testid="column"] .stButton > button[title*="emails"]:hover::after {
+        /* Ensure filter button tooltips stay within their column bounds */
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        max-width: 150px !important;
+    }
+
+    /* Prevent tooltips from interfering with page layout */
+    .stButton:hover {
+        /* Ensure button container doesn't expand when tooltip shows */
+        overflow: visible !important;
+        position: relative !important;
+        z-index: 1 !important;
+    }
+
+    /* Tooltip arrow with better styling */
+    .stButton > button[title*="emails"]:hover::before,
+    .stButton > button[title*="Start"]:hover::before,
+    .stButton > button[title*="Stop"]:hover::before,
+    .stButton > button[title*="Running"]:hover::before,
+    .stButton > button[title*="Processing"]:hover::before,
+    .stButton > button[title*="Logout"]:hover::before,
+    .stButton > button[title*="Clear"]:hover::before,
+    .stButton > button[title*="Refresh"]:hover::before,
+    .stButton > button[title*="Remove"]:hover::before,
+    .stButton > button[title*="Rebuild"]:hover::before,
+    .stButton > button[title*="Update"]:hover::before,
+    .stButton > button[title*="Download"]:hover::before,
+    .stButton > button[title*="View"]:hover::before {
         content: "" !important;
         position: absolute !important;
-        bottom: 160% !important; /* Position just below the tooltip with more spacing */
+        bottom: calc(100% + 9px) !important; /* Position arrow just below tooltip */
         left: 50% !important;
         transform: translateX(-50%) !important;
-        border-left: 6px solid transparent !important;
-        border-right: 6px solid transparent !important;
-        border-top: 6px solid rgba(0, 0, 0, 0.95) !important;
-        z-index: 10001 !important;
+        width: 0 !important;
+        height: 0 !important;
+        border-left: 5px solid transparent !important;
+        border-right: 5px solid transparent !important;
+        border-top: 6px solid rgba(40, 44, 52, 0.98) !important;
+        z-index: 999998 !important;
         pointer-events: none !important;
         opacity: 0 !important;
-        animation: tooltipFadeIn 0.2s ease-in-out forwards !important;
+        animation: smoothTooltipFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) 0.5s forwards !important;
     }
 
-    /* Fade-in animation for tooltips */
+    /* Smooth fade-in animation for tooltips */
+    @keyframes smoothTooltipFadeIn {
+        from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(8px) scale(0.95);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0) scale(1);
+        }
+    }
+
+    /* Legacy animation for compatibility */
     @keyframes tooltipFadeIn {
         from {
             opacity: 0;
@@ -1487,7 +1583,47 @@ def check_persistent_session():
         # Clean up expired sessions first
         session_manager.cleanup_expired_sessions()
         
-        # Try to get session token from various sources
+        # Strategy 1: Check if we have persistent user ID directly in session state
+        if st.session_state.get('persistent_user_id'):
+            user_id = st.session_state.persistent_user_id
+            log.debug(f"Found persistent user ID in session state: {user_id}")
+            
+            # Validate this user still exists and is approved
+            user_manager = st.session_state.user_manager
+            users = user_manager.load_users()
+            
+            if user_id in users and users[user_id].get('status') == 'approved':
+                log.info(f"Direct session state restoration for user {user_id}")
+                
+                # Restore full session
+                st.session_state.authenticated_user_id = user_id
+                oauth_manager = st.session_state.oauth_manager
+                user_email = users[user_id].get('email', '')
+                
+                # Find OAuth token for this user
+                try:
+                    authenticated_users = oauth_manager.list_authenticated_users()
+                    oauth_user_id = None
+                    
+                    for oid, email in authenticated_users.items():
+                        if email.lower() == user_email.lower():
+                            oauth_user_id = oid
+                            break
+                    
+                    if not oauth_user_id and len(authenticated_users) == 1:
+                        oauth_user_id = list(authenticated_users.keys())[0]
+                        
+                except Exception:
+                    oauth_user_id = None
+                
+                st.session_state.current_user = oauth_user_id
+                st.session_state.authentication_step = 'dashboard'
+                user_manager.update_last_login(user_id)
+                
+                log.info(f"Session restored from session state for user: {user_id}")
+                return True
+        
+        # Strategy 2: Try to get session token from various sources
         browser_session_token = session_manager.get_browser_session()
         
         # Enhanced debug output
@@ -1508,37 +1644,44 @@ def check_persistent_session():
                     
                     # Restore session state completely
                     st.session_state.authenticated_user_id = user_id
-                    # We need to find the OAuth user_id that matches this user_id
-                    # Check if there's a valid OAuth token for this user
                     oauth_manager = st.session_state.oauth_manager
-                    authenticated_users = oauth_manager.list_authenticated_users()
-                    
-                    # Find OAuth user_id by matching email
                     user_email = users[user_id].get('email', '')
+                    
+                    # Try to find ANY valid OAuth token for this user's email
                     oauth_user_id = None
+                    authenticated_users = {}
                     
-                    # Try to find a valid OAuth token for this user's email
+                    # More robust OAuth token discovery
                     try:
+                        authenticated_users = oauth_manager.list_authenticated_users()
+                        log.debug(f"Found {len(authenticated_users)} OAuth tokens available")
+                        
+                        # Strategy 1: Find by exact email match
                         for oid, email in authenticated_users.items():
-                            if email == user_email:
-                                # Verify this OAuth user_id actually has valid credentials
-                                if oauth_manager.is_authenticated(oid):
+                            if email.lower() == user_email.lower():
+                                oauth_user_id = oid
+                                log.debug(f"Found OAuth token by email match: {oid}")
+                                break
+                        
+                        # Strategy 2: Find by user_id prefix (fallback)
+                        if not oauth_user_id:
+                            for oid in authenticated_users.keys():
+                                if oid.startswith(user_id):
                                     oauth_user_id = oid
+                                    log.debug(f"Found OAuth token by user_id prefix: {oid}")
                                     break
+                        
+                        # Strategy 3: Use any token if user has only one (super fallback)
+                        if not oauth_user_id and len(authenticated_users) == 1:
+                            oauth_user_id = list(authenticated_users.keys())[0]
+                            log.debug(f"Using single available OAuth token: {oauth_user_id}")
+                            
                     except Exception as e:
-                        log.debug(f"Error checking OAuth tokens: {e}")
+                        log.debug(f"Error discovering OAuth tokens: {e}")
                     
-                    if oauth_user_id:
-                        st.session_state.current_user = oauth_user_id
-                        st.session_state.authentication_step = 'dashboard'
-                        log.debug(f"Restored OAuth session for user {user_email} with token {oauth_user_id}")
-                    else:
-                        # No valid OAuth token found, user needs to re-authenticate
-                        log.warning(f"No valid OAuth token found for user {user_email}, clearing session")
-                        session_manager.invalidate_session(browser_session_token)
-                        session_manager.clear_browser_session()
-                        st.session_state.authentication_step = 'login'
-                        return False
+                    # Set session state for successful restoration
+                    st.session_state.current_user = oauth_user_id
+                    st.session_state.authentication_step = 'dashboard'
                     
                     # Clear any login-related state
                     for key in ['oauth_result', 'oauth_error', 'oauth_processing']:
@@ -1548,7 +1691,11 @@ def check_persistent_session():
                     # Update last login time
                     user_manager.update_last_login(user_id)
                     
-                    log.info(f"Session successfully restored for user: {user_id}")
+                    if oauth_user_id:
+                        log.info(f"Session successfully restored for user: {user_id} with OAuth: {oauth_user_id}")
+                    else:
+                        log.info(f"Session restored for user: {user_id} (OAuth will be prompted if needed)")
+                    
                     return True
                 else:
                     log.warning(f"User {user_id} not found or not approved, clearing session")
@@ -2351,10 +2498,37 @@ def show_dashboard():
                 session_manager.invalidate_session(browser_token)
             session_manager.clear_browser_session()
             
-            # Clear session state
-            st.session_state.current_user = None
-            st.session_state.authenticated_user_id = None
+            # Clear all session state variables
+            session_keys_to_clear = [
+                'current_user', 'authenticated_user_id', 'authentication_step',
+                'persistent_user_id', 'oauth_user_id', 'session_restored_on_load',
+                'session_initialized', 'user_manager', 'selected_model',
+                'api_keys_updated', 'processing_active', 'processing_started',
+                'processing_stopped', 'activity_logs', 'processing_logs'
+            ]
+            
+            for key in session_keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # Reset authentication step
             st.session_state.authentication_step = 'login'
+            
+            # Clear any browser storage via JavaScript
+            st.markdown("""
+            <script>
+            // Clear browser storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Clear cookies
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            </script>
+            """, unsafe_allow_html=True)
+            
+            log.info(f"User {user_id} logged out successfully")
             st.rerun()
     
     st.markdown("---")
@@ -2747,8 +2921,10 @@ def init_session_state():
         'processing_active': False,
         'activity_logs': [],
         'email_rules': [],
+        'session_initialized': False,
         'gmail_search': 'is:unread',
-        'filter_max_emails': 10
+        'filter_max_emails': 10,
+        'selected_model': os.getenv('MODEL', 'anthropic/claude-4-sonnet')
     }
     
     for key, value in defaults.items():
@@ -2893,11 +3069,14 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     
     # Max emails input
     with col8:
+        # Initialize session state if not exists
+        if 'filter_max_emails' not in st.session_state:
+            st.session_state.filter_max_emails = 10
+            
         max_emails = st.number_input(
             "Max Emails", 
             min_value=1, 
             max_value=100, 
-            value=st.session_state.get('filter_max_emails', 10), 
             key="filter_max_emails", 
             label_visibility="collapsed"
         )
@@ -4279,8 +4458,190 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
     
     st.markdown("---")
     
+    # Model selection settings
+    st.markdown("### 🤖 AI Model Configuration")
+    
+    # Available models with descriptions
+    model_options = {
+        "Claude 4 Sonnet": {
+            "value": "anthropic/claude-4-sonnet",
+            "description": "Latest Claude model, excellent reasoning and email understanding",
+            "api_key_env": "ANTHROPIC_API_KEY"
+        },
+        "Claude 3.5 Sonnet": {
+            "value": "anthropic/claude-3-5-sonnet-20241022", 
+            "description": "Fast and capable, great for email automation",
+            "api_key_env": "ANTHROPIC_API_KEY"
+        },
+        "GPT-4o": {
+            "value": "openai/gpt-4o",
+            "description": "High-quality OpenAI model, slower but very capable",
+            "api_key_env": "OPENAI_API_KEY"
+        },
+        "GPT-4o-mini": {
+            "value": "openai/gpt-4o-mini",
+            "description": "Fast and cost-effective OpenAI model, good for email tasks",
+            "api_key_env": "OPENAI_API_KEY"
+        },
+        "GPT-4": {
+            "value": "openai/gpt-4",
+            "description": "Original GPT-4, reliable but slower and more expensive",
+            "api_key_env": "OPENAI_API_KEY"
+        }
+    }
+    
+    # Initialize session state for model selection
+    if 'selected_model' not in st.session_state:
+        st.session_state.selected_model = os.getenv('MODEL', 'anthropic/claude-4-sonnet')
+    
+    # Model selection
+    current_model_name = None
+    for name, config in model_options.items():
+        if config['value'] == st.session_state.selected_model:
+            current_model_name = name
+            break
+    
+    if not current_model_name:
+        current_model_name = "Claude 4 Sonnet"  # Default fallback
+    
+    selected_model_name = st.selectbox(
+        "Select AI Model",
+        options=list(model_options.keys()),
+        index=list(model_options.keys()).index(current_model_name),
+        help="Choose the AI model for email processing. Different models have different capabilities and costs."
+    )
+    
+    selected_model_config = model_options[selected_model_name]
+    selected_model_value = selected_model_config['value']
+    
+    # Show model description with inline status
+    required_api_key = selected_model_config['api_key_env']
+    api_key_available = bool(os.getenv(required_api_key))
+    status_icon = "✅" if api_key_available else "❌"
+    
+    st.markdown(f"{status_icon} **{selected_model_name}**: {selected_model_config['description']}")
+    
+    # Update model if changed
+    if selected_model_value != st.session_state.selected_model:
+        st.session_state.selected_model = selected_model_value
+        os.environ['MODEL'] = selected_model_value
+        st.rerun()
+    
+    # Set current model in environment if not already set
+    if not os.getenv('MODEL') or os.getenv('MODEL') != st.session_state.selected_model:
+        os.environ['MODEL'] = st.session_state.selected_model
+        log.debug(f"Environment MODEL set to: {st.session_state.selected_model}")
+    
+    st.markdown("---")
+    
+    # API Key Configuration
+    st.markdown("### 🔑 API Key Configuration")
+    st.markdown("Configure your AI model API keys. These will be stored securely in your environment.")
+    
+    # Initialize session state for API keys
+    if 'api_keys_updated' not in st.session_state:
+        st.session_state.api_keys_updated = False
+    
+    # Create columns for API key inputs
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Anthropic API Key")
+        current_anthropic_key = os.getenv('ANTHROPIC_API_KEY', '')
+        masked_anthropic = current_anthropic_key[:12] + '...' + current_anthropic_key[-8:] if current_anthropic_key else ''
+        
+        anthropic_key = st.text_input(
+            "Anthropic API Key", 
+            value=masked_anthropic,
+            type="password",
+            help="Your Anthropic API key for Claude models. Get it from https://console.anthropic.com/",
+            placeholder="sk-ant-api03-..."
+        )
+        
+        if anthropic_key and anthropic_key != masked_anthropic:
+            os.environ['ANTHROPIC_API_KEY'] = anthropic_key
+            st.session_state.api_keys_updated = True
+    
+    with col2:
+        st.markdown("#### OpenAI API Key")
+        current_openai_key = os.getenv('OPENAI_API_KEY', '')
+        masked_openai = current_openai_key[:12] + '...' + current_openai_key[-8:] if current_openai_key else ''
+        
+        openai_key = st.text_input(
+            "OpenAI API Key",
+            value=masked_openai,
+            type="password", 
+            help="Your OpenAI API key for GPT models. Get it from https://platform.openai.com/api-keys",
+            placeholder="sk-proj-..."
+        )
+        
+        if openai_key and openai_key != masked_openai:
+            os.environ['OPENAI_API_KEY'] = openai_key
+            st.session_state.api_keys_updated = True
+    
+    # Update .env file if keys were changed
+    if st.session_state.api_keys_updated:
+        if st.button(" Save API Keys to .env file", help="Permanently save these API keys to your .env file"):
+            try:
+                # Read current .env file
+                env_file_path = '.env'
+                env_lines = []
+                
+                if os.path.exists(env_file_path):
+                    with open(env_file_path, 'r') as f:
+                        env_lines = f.readlines()
+                
+                # Update or add API keys
+                updated_lines = []
+                anthropic_updated = False
+                openai_updated = False
+                
+                for line in env_lines:
+                    if line.startswith('ANTHROPIC_API_KEY='):
+                        if anthropic_key and anthropic_key != masked_anthropic:
+                            updated_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
+                            anthropic_updated = True
+                        else:
+                            updated_lines.append(line)
+                    elif line.startswith('OPENAI_API_KEY='):
+                        if openai_key and openai_key != masked_openai:
+                            updated_lines.append(f'OPENAI_API_KEY={openai_key}\n')
+                            openai_updated = True
+                        else:
+                            updated_lines.append(line)
+                    else:
+                        updated_lines.append(line)
+                
+                # Add new keys if they weren't found in existing file
+                if not anthropic_updated and anthropic_key and anthropic_key != masked_anthropic:
+                    updated_lines.append(f'ANTHROPIC_API_KEY={anthropic_key}\n')
+                
+                if not openai_updated and openai_key and openai_key != masked_openai:
+                    updated_lines.append(f'OPENAI_API_KEY={openai_key}\n')
+                
+                # Write updated .env file
+                with open(env_file_path, 'w') as f:
+                    f.writelines(updated_lines)
+                
+                st.session_state.api_keys_updated = False
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"❌ Error saving API keys: {str(e)}")
+    
+    # Show current API key status
+    st.markdown("#### API Key Status")
+    
+    anthropic_status = "✅ Configured" if os.getenv('ANTHROPIC_API_KEY') else "❌ Not set"
+    openai_status = "✅ Configured" if os.getenv('OPENAI_API_KEY') else "❌ Not set"
+    
+    st.markdown(f"**Anthropic API Key**: {anthropic_status}")
+    st.markdown(f"**OpenAI API Key**: {openai_status}")
+    
+    st.markdown("---")
+    
     # OAuth2 settings
-    st.markdown("###  Authentication Settings")
+    st.markdown("### 🔐 Authentication Settings")
     
     if st.button(" Refresh Authentication", help="Refresh OAuth2 token"):
         try:
@@ -4306,6 +4667,16 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
                 
         except Exception as e:
             st.error(f"Error refreshing authentication: {e}")
+    
+    if st.button(" Clean Up OAuth Tokens", help="Remove corrupted OAuth tokens"):
+        try:
+            removed_count = oauth_manager.cleanup_corrupted_tokens()
+            if removed_count > 0:
+                st.info(f"🧹 Cleaned up {removed_count} corrupted OAuth token(s)")
+            else:
+                st.info("✅ No corrupted tokens found")
+        except Exception as e:
+            st.error(f"Error cleaning up tokens: {e}")
     
     if st.button(" Remove This Account", type="secondary", help="Remove OAuth2 access for this account"):
         confirm_remove = st.checkbox("I confirm I want to remove this account")
@@ -4695,7 +5066,20 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             st.session_state.processing_stopped = False
             return
         
-        # Create a crew for this specific user 
+        # CRITICAL: Set MODEL environment variable BEFORE creating crew
+        if 'selected_model' in st.session_state and st.session_state.selected_model:
+            selected_model = st.session_state.selected_model
+            os.environ['MODEL'] = selected_model
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Setting AI model: {selected_model}")
+            log.info(f"Pre-crew MODEL environment set to: {selected_model}")
+        else:
+            # Fallback to default
+            default_model = "anthropic/claude-4-sonnet"
+            os.environ['MODEL'] = default_model
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Using default AI model: {default_model}")
+            log.warning(f"No selected model found, using default: {default_model}")
+        
+        # Create a crew for this specific user (now with correct MODEL env var)
         crew = create_crew_for_user(user_id, oauth_manager)
         
         st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 AI crew initialized, starting processing...")
@@ -4783,6 +5167,8 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             # Set up output capture
             activity_capture = ActivityLogCapture()
             
+            # Model is already set before crew creation
+            
             # Redirect stdout to capture CrewAI output
             with contextlib.redirect_stdout(activity_capture):
                 result = crew.crew().kickoff()
@@ -4836,37 +5222,234 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             st.session_state.processing_stopped = False
             
         except Exception as crew_error:
-            # Log crew-specific errors
+            # Enhanced crew-specific error handling with detailed user notification
+            crew_error_str = str(crew_error)
+            
+            # Analyze error type and provide specific guidance
+            error_analysis = analyze_crew_error(crew_error_str)
+            
+            # Log detailed error information
             error_logger.log_error(
                 "CrewAI", 
-                f"CrewAI execution failed: {str(crew_error)}",
-                f"Error during crew execution for user {user_email}. Filters: {json.dumps(filters)}. Rules: {rule_instructions}",
+                f"CrewAI execution failed: {crew_error_str}",
+                f"Error during crew execution for user {user_email}. Filters: {json.dumps(filters)}. Rules: {rule_instructions}. Analysis: {error_analysis['category']}",
                 user_id
             )
-            st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  CrewAI Error: {str(crew_error)}")
-            raise crew_error
+            
+            # Add detailed error to activity logs
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ CrewAI execution failed")
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Error type: {error_analysis['category']}")
+            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 💡 {error_analysis['user_message']}")
+            
+            # Show comprehensive error notification to user
+            st.error("🚨 **Email Processing Failed**")
+            
+            with st.expander("📋 Error Details & Troubleshooting", expanded=True):
+                st.markdown(f"**Error Category:** {error_analysis['category']}")
+                st.markdown(f"**What happened:** {error_analysis['user_message']}")
+                
+                if error_analysis['solutions']:
+                    st.markdown("**🛠️ Recommended Solutions:**")
+                    for i, solution in enumerate(error_analysis['solutions'], 1):
+                        st.markdown(f"{i}. {solution}")
+                
+                if error_analysis['technical_details']:
+                    with st.expander("🔧 Technical Details (for advanced users)"):
+                        st.code(error_analysis['technical_details'])
+                
+                # Show processing context
+                st.markdown("**📊 Processing Context:**")
+                st.markdown(f"- **User:** {user_email}")
+                st.markdown(f"- **Search Query:** `{filters.get('gmail_search', 'is:unread')}`")
+                st.markdown(f"- **Max Emails:** {filters.get('max_emails', 10)}")
+                if rule_instructions:
+                    st.markdown(f"- **Active Rules:** {len(st.session_state.get('email_rules', []))} rules applied")
+                
+                # Provide immediate action buttons
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("🔄 Retry Processing", help="Try processing again"):
+                        st.rerun()
+                with col2:
+                    if st.button("🔧 Check Settings", help="Go to Settings tab"):
+                        st.session_state.selected_main_tab = "⚙️ Settings"
+                        st.rerun()
+                with col3:
+                    if st.button("📞 Get Help", help="View help documentation"):
+                        st.session_state.selected_main_tab = "❓ Help"
+                        st.rerun()
+            
+            # Reset processing state
+            st.session_state.processing_active = False
+            st.session_state.processing_started = False
+            st.session_state.processing_stopped = False
+            
+            return  # Don't re-raise to prevent double error display
             
     except Exception as e:
-        # Log general processing errors
-        error_type = "Processing"
-        if "oauth" in str(e).lower() or "auth" in str(e).lower():
-            error_type = "Authentication"
-        elif "agent" in str(e).lower():
-            error_type = "Agent"
+        # Enhanced general error handling with detailed user notification
+        error_str = str(e)
+        error_analysis = analyze_crew_error(error_str)
         
+        # Log detailed error information
         error_logger.log_error(
-            error_type, 
-            f"Email processing failed: {str(e)}",
-            f"Error during email processing for user {oauth_manager.get_user_email(user_id)}. Filters: {json.dumps(filters)}",
+            error_analysis['category'], 
+            f"Email processing failed: {error_str}",
+            f"Error during email processing for user {oauth_manager.get_user_email(user_id)}. Filters: {json.dumps(filters)}. Analysis: {error_analysis['category']}",
             user_id
         )
         
-        st.session_state.processing_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}]  Error: {str(e)}")
+        # Add detailed error to activity logs
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Email processing failed")
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Error type: {error_analysis['category']}")
+        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 💡 {error_analysis['user_message']}")
+        
+        # Reset processing state
         st.session_state.processing_active = False
         st.session_state.processing_started = False
         st.session_state.processing_stopped = False
-        st.error(f" Error processing emails: {e}")
-        st.exception(e)
+        
+        # Show comprehensive error notification to user
+        st.error("🚨 **Email Processing Failed**")
+        
+        with st.expander("📋 Error Details & Troubleshooting", expanded=True):
+            st.markdown(f"**Error Category:** {error_analysis['category']}")
+            st.markdown(f"**What happened:** {error_analysis['user_message']}")
+            
+            if error_analysis['solutions']:
+                st.markdown("**🛠️ Recommended Solutions:**")
+                for i, solution in enumerate(error_analysis['solutions'], 1):
+                    st.markdown(f"{i}. {solution}")
+            
+            if error_analysis['technical_details']:
+                with st.expander("🔧 Technical Details (for advanced users)"):
+                    st.code(error_analysis['technical_details'])
+            
+            # Show processing context
+            st.markdown("**📊 Processing Context:**")
+            st.markdown(f"- **User:** {oauth_manager.get_user_email(user_id)}")
+            st.markdown(f"- **Search Query:** `{filters.get('gmail_search', 'is:unread')}`")
+            st.markdown(f"- **Max Emails:** {filters.get('max_emails', 10)}")
+            
+            # Provide immediate action buttons
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("🔄 Retry Processing", help="Try processing again", key="retry_general"):
+                    st.rerun()
+            with col2:
+                if st.button("🔧 Check Settings", help="Go to Settings tab", key="settings_general"):
+                    st.session_state.selected_main_tab = "⚙️ Settings"
+                    st.rerun()
+            with col3:
+                if st.button("📞 Get Help", help="View help documentation", key="help_general"):
+                    st.session_state.selected_main_tab = "❓ Help"
+                    st.rerun()
+
+
+def analyze_crew_error(error_message: str) -> dict:
+    """Analyze crew error and provide user-friendly explanations and solutions."""
+    error_message_lower = error_message.lower()
+    
+    # Default analysis
+    analysis = {
+        'category': 'Unknown Error',
+        'user_message': 'An unexpected error occurred during email processing.',
+        'solutions': ['Try processing again', 'Check your internet connection', 'Contact support if the problem persists'],
+        'technical_details': error_message
+    }
+    
+    # API Key Issues
+    if any(phrase in error_message_lower for phrase in ['api_key', 'authentication', 'openai_api_key', 'anthropic_api_key']):
+        analysis.update({
+            'category': 'API Key Configuration',
+            'user_message': 'The AI model API key is missing or invalid. This prevents the AI agents from working.',
+            'solutions': [
+                'Go to Settings → AI Model Configuration and verify your API key is set',
+                'Check that you selected the correct model for your available API keys',
+                'Ensure your API key has sufficient credits/quota',
+                'Try switching to a different AI model if you have multiple API keys configured'
+            ]
+        })
+    
+    # OAuth/Gmail Issues
+    elif any(phrase in error_message_lower for phrase in ['oauth', 'gmail', 'credentials', 'token']):
+        analysis.update({
+            'category': 'Gmail Authentication',
+            'user_message': 'There was an issue accessing your Gmail account. Your authentication may have expired.',
+            'solutions': [
+                'Go to Settings → Authentication Settings and click "Refresh Authentication"',
+                'Try logging out and logging back in',
+                'Check that your Google account has Gmail API access enabled',
+                'Ensure you granted all required permissions during OAuth setup'
+            ]
+        })
+    
+    # Rate Limiting
+    elif any(phrase in error_message_lower for phrase in ['rate limit', 'quota', 'too many requests']):
+        analysis.update({
+            'category': 'Rate Limiting',
+            'user_message': 'You have hit API rate limits. This happens when too many requests are made too quickly.',
+            'solutions': [
+                'Wait a few minutes before trying again',
+                'Reduce the number of emails being processed at once',
+                'Check your API provider dashboard for quota information',
+                'Consider upgrading your API plan if you frequently hit limits'
+            ]
+        })
+    
+    # Network Issues
+    elif any(phrase in error_message_lower for phrase in ['network', 'connection', 'timeout', 'unreachable']):
+        analysis.update({
+            'category': 'Network Connection',
+            'user_message': 'There was a network connectivity issue preventing communication with required services.',
+            'solutions': [
+                'Check your internet connection',
+                'Try refreshing the page and running again',
+                'Verify that your firewall/proxy allows access to Gmail and AI APIs',
+                'Wait a moment and retry - this might be a temporary service issue'
+            ]
+        })
+    
+    # Model/LLM Issues
+    elif any(phrase in error_message_lower for phrase in ['model', 'llm', 'litellm', 'completion']):
+        analysis.update({
+            'category': 'AI Model Issue',
+            'user_message': 'The AI model encountered an error while processing your emails.',
+            'solutions': [
+                'Try switching to a different AI model in Settings',
+                'Reduce the number of emails being processed at once',
+                'Check that your selected model is available and working',
+                'Verify your API key has access to the selected model'
+            ]
+        })
+    
+    # Email Processing Issues
+    elif any(phrase in error_message_lower for phrase in ['fetch', 'email', 'organize', 'categorize']):
+        analysis.update({
+            'category': 'Email Processing',
+            'user_message': 'An error occurred while fetching or processing your emails.',
+            'solutions': [
+                'Try using a simpler search query (e.g., just "is:unread")',
+                'Reduce the maximum number of emails to process',
+                'Check that your Gmail account is accessible',
+                'Verify your search query syntax is correct'
+            ]
+        })
+    
+    # Permission Issues
+    elif any(phrase in error_message_lower for phrase in ['permission', 'forbidden', 'unauthorized', 'access denied']):
+        analysis.update({
+            'category': 'Permission Error',
+            'user_message': 'The app does not have sufficient permissions to access the required services.',
+            'solutions': [
+                'Re-authenticate with Google to grant fresh permissions',
+                'Check that Gmail API is enabled in your Google Cloud project',
+                'Verify OAuth consent screen includes required scopes',
+                'Contact your administrator if using a work/school account'
+            ]
+        })
+    
+    return analysis
 
 
 def generate_rule_instructions() -> str:
@@ -5029,6 +5612,84 @@ def main():
     
     init_session_state()
     
+    # CRITICAL: Ensure environment variables are loaded from .env file
+    from dotenv import load_dotenv
+    load_dotenv(override=True)  # Force reload of .env file
+    
+    # CRITICAL: Ensure MODEL environment variable is always set
+    if 'selected_model' in st.session_state and st.session_state.selected_model:
+        os.environ['MODEL'] = st.session_state.selected_model
+        log.debug(f"Early MODEL environment setting: {st.session_state.selected_model}")
+    
+    # Debug API keys
+    log.debug(f"ANTHROPIC_API_KEY loaded: {'Yes' if os.getenv('ANTHROPIC_API_KEY') else 'No'}")
+    log.debug(f"OPENAI_API_KEY loaded: {'Yes' if os.getenv('OPENAI_API_KEY') else 'No'}")
+    
+    # CRITICAL: Check for persistent session immediately after app initialization
+    # This ensures session is restored BEFORE any routing logic
+    if not st.session_state.get('session_restored_on_load', False):
+        st.session_state.session_restored_on_load = True
+        
+        # Always show loading indicator on page refresh/load
+        loading_placeholder = st.empty()
+        with loading_placeholder.container():
+            st.markdown("""
+            <div style="
+                display: flex; 
+                flex-direction: column; 
+                align-items: center; 
+                justify-content: center; 
+                height: 80vh;
+                text-align: center;
+            ">
+                <div style="
+                    display: inline-block;
+                    width: 40px;
+                    height: 40px;
+                    border: 4px solid #f3f3f3;
+                    border-top: 4px solid #3498db;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                    margin-bottom: 20px;
+                "></div>
+                <h3 style="color: #666; margin: 0;">🔄 Loading application...</h3>
+                <p style="color: #888; margin: 5px 0 0 0;">Checking your session</p>
+            </div>
+            <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            </style>
+            """, unsafe_allow_html=True)
+        
+        # Debug current session state
+        log.debug(f"Page load session check - persistent_user_id: {st.session_state.get('persistent_user_id')}")
+        log.debug(f"Page load session check - authenticated_user_id: {st.session_state.get('authenticated_user_id')}")
+        log.debug(f"Page load session check - authentication_step: {st.session_state.get('authentication_step')}")
+        
+        # Small delay to ensure loading indicator is visible
+        import time
+        time.sleep(0.8)
+        
+        session_restored = check_persistent_session()
+        
+        # Clear the loading indicator
+        loading_placeholder.empty()
+        
+        if session_restored:
+            log.info("Session restored successfully on page load")
+            # Show brief success message before redirect
+            success_placeholder = st.empty()
+            with success_placeholder.container():
+                st.success("✅ Session restored successfully!")
+            time.sleep(0.5)
+            success_placeholder.empty()
+            # Force immediate redirect to prevent any login page flash
+            st.rerun()
+        else:
+            log.debug("No persistent session found on page load")
+    
     # Get query params for OAuth callback and approval links
     query_params = st.query_params
     
@@ -5118,6 +5779,10 @@ def main():
                             session_token = session_manager.create_session(new_user_id)
                             session_manager.set_browser_session(session_token)
                             
+                            # ADDITIONAL: Store directly in session state for immediate persistence
+                            st.session_state.persistent_session_token = session_token
+                            st.session_state.persistent_user_id = new_user_id
+                            
                             # Clean up pending state
                             if 'pending_oauth_user_id' in st.session_state:
                                 del st.session_state.pending_oauth_user_id
@@ -5197,6 +5862,10 @@ def main():
                                     session_token = session_manager.create_session(user_id)
                                     session_manager.set_browser_session(session_token)
                                     
+                                    # ADDITIONAL: Store directly in session state for immediate persistence
+                                    st.session_state.persistent_session_token = session_token
+                                    st.session_state.persistent_user_id = user_id
+                                    
                                     # Clean up pending state
                                     if 'pending_oauth_user_id' in st.session_state:
                                         del st.session_state.pending_oauth_user_id
@@ -5242,6 +5911,10 @@ def main():
                             # Create persistent session (7-day login)
                             session_token = session_manager.create_session(authenticated_user_id)
                             session_manager.set_browser_session(session_token)
+                            
+                            # ADDITIONAL: Store directly in session state for immediate persistence
+                            st.session_state.persistent_session_token = session_token
+                            st.session_state.persistent_user_id = authenticated_user_id
                             
                             # Clean up pending state (if any)
                             if 'pending_login_user_id' in st.session_state:
@@ -5316,10 +5989,41 @@ def main():
     if not show_setup_instructions():
         return
     
-    # Check for persistent session first (before routing to login)
+    # Always check for persistent session on page load/refresh
+    if not st.session_state.get('session_initialized', False):
+        st.session_state.session_initialized = True
+        
+        # Show brief loading indicator
+        if st.session_state.get('persistent_user_id'):
+            with st.spinner('🔄 Restoring session...'):
+                if check_persistent_session():
+                    # Successfully restored session, redirect to dashboard
+                    st.rerun()
+        else:
+            if check_persistent_session():
+                # Successfully restored session, redirect to dashboard
+                st.rerun()
+    
+    # Also check for persistent session if we're in login state
     if st.session_state.authentication_step == 'login':
+        if st.session_state.get('persistent_user_id'):
+            with st.spinner('🔄 Checking session...'):
+                if check_persistent_session():
+                    # Successfully restored session, redirect to dashboard
+                    st.rerun()
+        else:
+            if check_persistent_session():
+                # Successfully restored session, redirect to dashboard
+                st.rerun()
+    
+    # Additional check: if we have no authenticated_user_id but should be in dashboard
+    if (st.session_state.authentication_step == 'dashboard' and 
+        not st.session_state.get('authenticated_user_id')):
         if check_persistent_session():
-            # Successfully restored session, redirect to dashboard
+            st.rerun()
+        else:
+            # No valid session found, go back to login
+            st.session_state.authentication_step = 'login'
             st.rerun()
     
     # Route to appropriate page based on authentication state

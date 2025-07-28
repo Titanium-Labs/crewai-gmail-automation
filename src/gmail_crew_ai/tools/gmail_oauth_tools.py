@@ -1,6 +1,7 @@
 """Gmail tools that use OAuth2 authentication instead of app passwords."""
 
 import os
+import json
 import email
 from email.header import decode_header
 from typing import List, Tuple, Optional, Dict, Any
@@ -90,6 +91,10 @@ class OAuth2GmailToolBase(BaseTool):
         if user_id is None:
             user_id = os.environ.get("CURRENT_USER_ID")
         
+        # Auto-detect primary user if no user_id specified
+        if not user_id:
+            user_id = self._get_primary_user_id()
+        
         # Initialize OAuth2 manager if not provided
         if oauth_manager is None and OAuth2Manager:
             oauth_manager = OAuth2Manager()
@@ -98,14 +103,45 @@ class OAuth2GmailToolBase(BaseTool):
         self.oauth_manager = oauth_manager
 
         if not self.user_id:
-            raise ValueError("User ID must be provided or set in CURRENT_USER_ID environment variable")
+            raise ValueError("No authenticated user found. Please authenticate first or set CURRENT_USER_ID environment variable")
 
+    def _get_primary_user_id(self) -> Optional[str]:
+        """Auto-detect primary user ID from users.json file."""
+        try:
+            # Try to load users.json to find primary user
+            if os.path.exists('users.json'):
+                with open('users.json', 'r') as f:
+                    users = json.loads(f.read())
+                
+                # Find primary user
+                for user_id, user_data in users.items():
+                    if user_data.get('is_primary', False):
+                        print(f"Auto-detected primary user: {user_id} ({user_data.get('email', 'unknown')})")
+                        return user_id
+                
+                # If no primary user, get the first approved user
+                for user_id, user_data in users.items():
+                    if user_data.get('status') == 'approved':
+                        print(f"Using first approved user: {user_id} ({user_data.get('email', 'unknown')})")
+                        return user_id
+        except Exception as e:
+            print(f"Error auto-detecting user: {e}")
+        
+        return None
+    
     def _get_gmail_service(self):
         """Get Gmail API service for the authenticated user."""
         if not self.oauth_manager:
             raise ValueError("OAuth2 manager not available")
         
-        return self.oauth_manager.get_gmail_service(self.user_id)
+        try:
+            return self.oauth_manager.get_gmail_service(self.user_id)
+        except Exception as e:
+            print(f"Error getting Gmail service for user {self.user_id}: {e}")
+            # Try to refresh credentials or provide helpful error message
+            if "No valid credentials" in str(e):
+                raise ValueError(f"No valid OAuth2 credentials found for user {self.user_id}. Please re-authenticate through the web interface.")
+            raise
 
     def _gmail_message_to_email_format(self, message_data: Dict) -> Tuple[str, str, str, str, Dict]:
         """Convert Gmail API message to email format."""
@@ -248,8 +284,8 @@ class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
 class OAuth2GmailOrganizeToolSchema(BaseModel):
     """Schema for OAuth2GmailOrganizeTool input."""
     email_id: str = Field(description="ID of the email to organize")
-    labels_to_add: Optional[List[str]] = Field(default=None, description="List of labels to add to the email")
-    labels_to_remove: Optional[List[str]] = Field(default=None, description="List of labels to remove from the email")
+    labels_to_add: Optional[List[str]] = Field(default=None, description="List of labels to add to the email (keeps email in INBOX)")
+    labels_to_remove: Optional[List[str]] = Field(default=None, description="List of labels to remove from the email (NEVER remove INBOX)")
     star: bool = Field(default=False, description="Whether to star the email")
     unstar: bool = Field(default=False, description="Whether to unstar the email")
     mark_read: bool = Field(default=False, description="Whether to mark the email as read")
@@ -285,9 +321,13 @@ class OAuth2GmailOrganizeTool(OAuth2GmailToolBase):
             
             if labels_to_remove:
                 for label_name in labels_to_remove:
-                    label_id = self._get_label_id(service, label_name)
-                    if label_id:
-                        body['removeLabelIds'].append(label_id)
+                    # SAFETY CHECK: Never remove INBOX label
+                    if label_name.upper() != 'INBOX':
+                        label_id = self._get_label_id(service, label_name)
+                        if label_id:
+                            body['removeLabelIds'].append(label_id)
+                    else:
+                        print(f"⚠️  Prevented removal of INBOX label - emails must stay in inbox")
             
             # Handle starring
             if star:

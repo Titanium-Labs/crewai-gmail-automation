@@ -31,10 +31,29 @@ class GmailCrewAi():
 		print("⚠️  Note: Advanced tools disabled due to embedchain dependency conflicts")
 		print("=" * 50)
 
-	llm = LLM(
-		model="openai/gpt-4o-mini",
-		api_key=os.getenv("OPENAI_API_KEY"),
-	)
+	# Get model from environment with smart fallback
+	model = os.getenv("MODEL", "anthropic/claude-4-sonnet")
+	
+	# Determine which API key to use based on model
+	if "anthropic" in model.lower():
+		api_key = os.getenv("ANTHROPIC_API_KEY")
+		if not api_key:
+			print("⚠️  ANTHROPIC_API_KEY not found, falling back to OpenAI")
+			model = "openai/gpt-4o-mini"
+			api_key = os.getenv("OPENAI_API_KEY")
+	else:
+		api_key = os.getenv("OPENAI_API_KEY")
+		if not api_key:
+			print("⚠️  OPENAI_API_KEY not found, falling back to Claude")
+			model = "anthropic/claude-4-sonnet"
+			api_key = os.getenv("ANTHROPIC_API_KEY")
+	
+	if not api_key:
+		raise ValueError("No valid API key found. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file.")
+	
+	print(f"🤖 Using model: {model}")
+	print(f"🔑 Using API key type: {'Anthropic' if 'anthropic' in model.lower() else 'OpenAI'}")
+	llm = LLM(model=model, api_key=api_key)
 
 	@before_kickoff
 	def fetch_emails(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -120,6 +139,26 @@ class GmailCrewAi():
 			llm=self.llm
 		)
 
+	@agent
+	def summary_reporter(self) -> Agent:
+		"""The summary reporter agent."""
+		return Agent(
+			config=self.agents_config['summary_reporter'],
+			tools=basic_tools_config.get_summary_reporter_tools(),
+			verbose=True,
+			llm=self.llm
+		)
+
+	@agent
+	def feedback_processor(self) -> Agent:
+		"""The feedback processor agent."""
+		return Agent(
+			config=self.agents_config['feedback_processor'],
+			tools=basic_tools_config.get_feedback_processor_tools(),
+			verbose=True,
+			llm=self.llm
+		)
+
 	@task
 	def categorization_task(self) -> Task:
 		"""Task for categorizing emails."""
@@ -157,6 +196,26 @@ class GmailCrewAi():
 			agent=self.cleaner(),
 			context=[self.categorization_task(), self.organization_task()],
 			output_file='output/cleanup_report.json'
+		)
+
+	@task
+	def summary_report_task(self) -> Task:
+		"""Task for generating summary report."""
+		return Task(
+			config=self.tasks_config['summary_report_task'],
+			agent=self.summary_reporter(),
+			context=[self.categorization_task(), self.organization_task(), self.response_task(), self.cleanup_task()],
+			output_file='output/summary_report.json'
+		)
+
+	@task
+	def feedback_monitoring_task(self) -> Task:
+		"""Task for monitoring feedback."""
+		return Task(
+			config=self.tasks_config['feedback_monitoring_task'],
+			agent=self.feedback_processor(),
+			context=[],
+			output_file='output/feedback_processed.json'
 		)
 
 	@crew

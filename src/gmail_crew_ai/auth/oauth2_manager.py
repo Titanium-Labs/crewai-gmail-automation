@@ -87,13 +87,56 @@ class OAuth2Manager:
             flow.fetch_token(code=authorization_code)
             credentials = flow.credentials
             
+            # Validate credentials have essential fields (more forgiving validation for callback)
+            essential_fields = ['token', 'refresh_token']
+            missing_essential = []
+            
+            for field in essential_fields:
+                if not hasattr(credentials, field) or getattr(credentials, field) is None:
+                    missing_essential.append(field)
+            
+            if missing_essential:
+                print(f"OAuth credentials missing essential fields: {', '.join(missing_essential)}")
+                st.error(f"OAuth authentication incomplete. Missing: {', '.join(missing_essential)}")
+                st.info("Please try authenticating again. If the problem persists, check your OAuth2 configuration.")
+                return False
+            
+            # Log warnings for optional fields that are missing (but don't fail)
+            optional_fields = ['token_uri', 'client_id', 'client_secret']
+            missing_optional = []
+            for field in optional_fields:
+                if not hasattr(credentials, field) or getattr(credentials, field) is None:
+                    missing_optional.append(field)
+            
+            if missing_optional:
+                print(f"OAuth credentials missing optional fields (will be populated from client): {', '.join(missing_optional)}")
+                # Try to populate missing fields from the flow
+                try:
+                    if hasattr(flow, 'client_config') and 'client_id' in flow.client_config:
+                        if not hasattr(credentials, 'client_id') or credentials.client_id is None:
+                            credentials._client_id = flow.client_config['client_id']
+                        if not hasattr(credentials, 'client_secret') or credentials.client_secret is None:
+                            credentials._client_secret = flow.client_config['client_secret']
+                        if not hasattr(credentials, 'token_uri') or credentials.token_uri is None:
+                            credentials._token_uri = flow.client_config.get('token_uri', 'https://oauth2.googleapis.com/token')
+                except Exception as populate_error:
+                    print(f"Could not populate missing fields from flow: {populate_error}")
+                    # Continue anyway - the essential fields are present
+            
             # Save credentials
             self.save_credentials(user_id, credentials)
+            
+            # Verify saved credentials can be loaded
+            loaded_creds = self.load_credentials(user_id)
+            if not loaded_creds:
+                st.error("Failed to save OAuth credentials properly")
+                return False
             
             # Clean up session state
             if flow_key in st.session_state:
                 del st.session_state[flow_key]
             
+            print(f"✅ OAuth credentials saved successfully for user: {user_id}")
             return True
             
         except Exception as e:
@@ -110,7 +153,15 @@ class OAuth2Manager:
     
     def load_credentials(self, user_id: str) -> Optional[Credentials]:
         """Load user credentials."""
+        # First try the standard pattern
         token_file = self.tokens_dir / f"{user_id}_token.pickle"
+        
+        # If not found, look for files with the user_id prefix (handles session-based naming)
+        if not token_file.exists():
+            # Look for files that start with user_id
+            for file_path in self.tokens_dir.glob(f"{user_id}_*_token.pickle"):
+                token_file = file_path
+                break
         
         if not token_file.exists():
             return None
@@ -119,21 +170,51 @@ class OAuth2Manager:
             with open(token_file, 'rb') as token:
                 credentials = pickle.load(token)
             
+            # Validate that credentials have required fields
+            required_fields = ['token', 'refresh_token', 'token_uri', 'client_id', 'client_secret']
+            missing_fields = []
+            
+            for field in required_fields:
+                if not hasattr(credentials, field) or getattr(credentials, field) is None:
+                    missing_fields.append(field)
+            
+            if missing_fields:
+                print(f"OAuth credentials missing required fields for user {user_id}: {', '.join(missing_fields)}")
+                # Delete corrupted credentials file
+                token_file.unlink()
+                return None
+            
             # Refresh credentials if expired
             if credentials and credentials.expired and credentials.refresh_token:
-                credentials.refresh(Request())
-                self.save_credentials(user_id, credentials)
+                try:
+                    credentials.refresh(Request())
+                    self.save_credentials(user_id, credentials)
+                except Exception as refresh_error:
+                    print(f"Error refreshing OAuth credentials for user {user_id}: {refresh_error}")
+                    # Delete corrupted credentials file
+                    token_file.unlink()
+                    return None
             
             return credentials
             
         except Exception as e:
-            st.error(f"Error loading credentials: {str(e)}")
+            print(f"Error loading credentials for user {user_id}: {str(e)}")
+            # Delete corrupted credentials file
+            try:
+                token_file.unlink()
+            except:
+                pass
             return None
     
     def is_authenticated(self, user_id: str) -> bool:
         """Check if user is authenticated."""
         credentials = self.load_credentials(user_id)
-        return credentials is not None and credentials.valid
+        if not credentials:
+            return False
+        
+        # load_credentials already handles validation and refresh
+        # so if we get credentials back, they should be valid
+        return credentials.valid
     
     def get_gmail_service(self, user_id: str):
         """Get Gmail API service for authenticated user."""
@@ -141,7 +222,7 @@ class OAuth2Manager:
         if not credentials:
             raise ValueError(f"No valid credentials found for user: {user_id}")
         
-        return build('gmail', 'v1', credentials=credentials)
+        return build('gmail', 'v1', credentials=credentials, cache_discovery=False)
     
     def get_user_email(self, user_id: str) -> str:
         """Get the email address of the authenticated user."""
@@ -150,8 +231,17 @@ class OAuth2Manager:
             profile = service.users().getProfile(userId='me').execute()
             return profile['emailAddress']
         except Exception as e:
-            st.error(f"Error getting user email: {str(e)}")
-            return ""
+            # Check if this is a credentials issue that requires re-authentication
+            error_msg = str(e).lower()
+            if "credentials" in error_msg or "refresh" in error_msg or "authentication" in error_msg:
+                print(f"OAuth credentials invalid for user {user_id}: {str(e)}")
+                # Mark credentials as invalid so user will be prompted to re-authenticate
+                self.revoke_credentials(user_id)
+                return ""
+            else:
+                # Don't show error in UI for this specific case - just log it
+                print(f"Warning: Could not get user email: {str(e)}")
+                return ""
     
     def revoke_credentials(self, user_id: str) -> bool:
         """Revoke and delete user credentials."""
@@ -165,16 +255,57 @@ class OAuth2Manager:
                 except Exception:
                     pass  # Continue with token deletion even if revoke fails
             
-            # Delete token file
+            # Delete all token files for this user (including session-based ones)
+            for token_file in self.tokens_dir.glob(f"{user_id}*_token.pickle"):
+                try:
+                    token_file.unlink()
+                    print(f"Deleted OAuth token file: {token_file.name}")
+                except Exception as e:
+                    print(f"Could not delete token file {token_file.name}: {e}")
+            
+            # Also delete standard token file
             token_file = self.tokens_dir / f"{user_id}_token.pickle"
             if token_file.exists():
                 token_file.unlink()
+                print(f"Deleted standard OAuth token file for user: {user_id}")
             
             return True
             
         except Exception as e:
-            st.error(f"Error revoking credentials: {str(e)}")
+            print(f"Error revoking credentials for user {user_id}: {str(e)}")
             return False
+    
+    def cleanup_corrupted_tokens(self) -> int:
+        """Clean up any corrupted token files and return count of removed files."""
+        removed_count = 0
+        
+        for token_file in self.tokens_dir.glob("*_token.pickle"):
+            try:
+                with open(token_file, 'rb') as f:
+                    credentials = pickle.load(f)
+                
+                # Check if credentials have required fields
+                required_fields = ['token', 'refresh_token', 'token_uri', 'client_id', 'client_secret']
+                missing_fields = []
+                
+                for field in required_fields:
+                    if not hasattr(credentials, field) or getattr(credentials, field) is None:
+                        missing_fields.append(field)
+                
+                if missing_fields:
+                    print(f"Removing corrupted token file {token_file.name}: missing {', '.join(missing_fields)}")
+                    token_file.unlink()
+                    removed_count += 1
+                    
+            except Exception as e:
+                print(f"Removing corrupted token file {token_file.name}: {e}")
+                try:
+                    token_file.unlink()
+                    removed_count += 1
+                except:
+                    pass
+        
+        return removed_count
     
     def list_authenticated_users(self) -> Dict[str, str]:
         """List all authenticated users with their email addresses."""

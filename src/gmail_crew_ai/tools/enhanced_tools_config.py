@@ -72,6 +72,34 @@ class BasicToolsConfig:
         return tools
     
     @staticmethod
+    def get_summary_reporter_tools() -> List[Any]:
+        """Get tools for the summary reporter agent."""
+        tools = []
+        
+        # Add file tools for reading reports
+        tools.extend([FileReadTool, JsonFileReadTool, JsonFileSaveTool])
+        
+        # Add draft saving tool for sending summary emails
+        tools.append(SaveDraftTool)
+        
+        print("🔧 Summary Reporter tools: Report generation + Email drafting + File operations")
+        return tools
+    
+    @staticmethod
+    def get_feedback_processor_tools() -> List[Any]:
+        """Get tools for the feedback processor agent."""
+        tools = []
+        
+        # Add file tools for reading/writing configuration
+        tools.extend([FileReadTool, JsonFileReadTool, JsonFileSaveTool])
+        
+        # Add Gmail tools for reading feedback emails and sending responses
+        tools.extend([GetUnreadEmailsTool, SaveDraftTool])
+        
+        print("🔧 Feedback Processor tools: Gmail monitoring + Configuration updates + File operations")
+        return tools
+    
+    @staticmethod
     def display_available_tools():
         """Display information about available tools."""
         print("\n🛠️ AVAILABLE TOOLS (Basic Configuration)")

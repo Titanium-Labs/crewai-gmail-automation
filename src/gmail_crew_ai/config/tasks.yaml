@@ -45,6 +45,11 @@ organization_task:
     
     **ORGANIZATION RULES:**
     
+    **IMPORTANT: KEEP EMAILS IN INBOX**
+    - When applying labels, ALWAYS keep emails in the INBOX
+    - NEVER remove the INBOX label - emails should remain visible in the main inbox view
+    - Labels are additive - they organize emails while keeping them accessible
+    
     **Stars Assignment:**
     - **HIGH** priority: Yellow star (⭐)
     - **MEDIUM** priority: Orange star 
@@ -78,9 +83,15 @@ organization_task:
     
     Use the 'OAuth2GmailOrganizeTool' to apply labels and stars to each email based on the categorization.
     
+    **IMPORTANT: MARK ALL PROCESSED EMAILS AS READ**
+    After organizing each email (labels, stars), you MUST also mark it as READ using:
+    - mark_read: true
+    This ensures all processed emails are clearly marked as handled by the system.
+    
     Your final answer should be a JSON object with:
-    - emails: Array of email objects with email_id, subject, labels_applied, star_applied, and organization_status
+    - emails: Array of email objects with email_id, subject, labels_applied, star_applied, marked_read, and organization_status
     - total_organized: Number of emails successfully organized
+    - total_marked_read: Number of emails marked as read
     - failed_operations: List of any failed organization attempts
     - summary: Brief summary of organization results
   expected_output: >
@@ -102,6 +113,7 @@ response_task:
     
     Only generate responses for:
     - PERSONAL emails with HIGH or MEDIUM priority
+    - IMPORTANT emails with HIGH priority (business/work emails requiring urgent response)
     - DO NOT generate responses for ANY YouTube emails - the user will respond directly on YouTube instead
     
     
@@ -118,6 +130,13 @@ response_task:
     - Include relevant personal or professional context
     - Use appropriate tone based on the relationship with the recipient
     - Reference shared interests or past interactions if relevant
+    
+    For BUSINESS/IMPORTANT emails:
+    - Use professional, direct tone matching Michael's communication style
+    - Include appropriate business context and contact information
+    - For payment/billing inquiries: Acknowledge receipt and indicate review
+    - For technical issues: Confirm understanding and provide timeline for response
+    - For client communications: Maintain professional boundaries while being helpful
     
     MANDATORY: For each email that needs a response, you MUST use the 'OAuth2SaveDraftTool' tool:
     
@@ -197,3 +216,122 @@ cleanup_task:
     - summary: Brief summary of cleanup actions and space freed
   expected_output: >
     A detailed cleanup report showing exactly which emails were deleted and why, which were preserved and why, and the overall impact of the cleanup operation.
+
+summary_report_task:
+  description: >
+    Create a comprehensive summary email of the entire email processing session and send it to the user's inbox.
+    
+    FIRST: Read all previous task reports using FileReadTool:
+    - 'output/categorized_emails.json' (categorization results)
+    - 'output/organized_emails.json' (organization results)  
+    - 'output/email_responses.json' (response generation results)
+    - 'output/cleanup_report.json' (cleanup results)
+    
+    Create a professional, detailed summary email that includes:
+    
+    **EMAIL STRUCTURE:**
+    Subject: "📧 Gmail Automation Summary - [DATE] - [TOTAL_EMAILS] emails processed"
+    
+    **EMAIL CONTENT:**
+    
+    **📊 PROCESSING SUMMARY**
+    - Total emails processed: X
+    - Emails categorized and organized: X  
+    - Draft responses created: X
+    - Emails cleaned up/deleted: X
+    - Processing completion time: [timestamp]
+    
+    **📋 DETAILED BREAKDOWN**
+    
+    **Categories Processed:**
+    - PERSONAL: X emails (X High, X Medium, X Low priority)
+    - IMPORTANT: X emails (X High, X Medium, X Low priority)  
+    - NEWSLETTER: X emails
+    - PROMOTION: X emails
+    - RECEIPT: X emails
+    - YOUTUBE: X emails
+    - OTHER: X emails
+    
+    **📝 ACTIONS TAKEN:**
+    - ⭐ Starred emails: X (list reasons: urgent, needs response, etc.)
+    - 🏷️ Labels applied: [list of unique labels used]
+    - ✅ Marked as read: X emails
+    - 📤 Draft responses created: X (list subjects)
+    - 🗑️ Emails deleted: X (list categories/reasons)
+    
+    **🎯 KEY HIGHLIGHTS:**
+    - Most urgent items requiring your attention
+    - Important business communications handled
+    - Notable patterns or trends in this batch
+    - Any unusual or flagged items
+    
+    **🔄 FEEDBACK REQUEST:**
+    Please reply to this email with any feedback on the processing:
+    - Were any emails categorized incorrectly?
+    - Should any responses be modified or not sent?
+    - Are there new rules you'd like me to learn?
+    - Any specific preferences for future processing?
+    
+    **SYSTEM ID:** GMAIL_AUTOMATION_SUMMARY_[TIMESTAMP]
+    
+    MANDATORY: Use the 'OAuth2SaveDraftTool' to send this summary email:
+    - recipient: [user's own email address from user persona]
+    - subject: The formatted subject line above
+    - body: The complete summary content above
+    
+    Your final answer should be a JSON object with:
+    - summary_email_sent: Boolean indicating if summary was successfully sent
+    - summary_stats: Object with processing statistics
+    - user_feedback_requested: List of specific feedback areas requested
+    - system_identifier: Unique identifier for this processing session
+  expected_output: >
+    A comprehensive summary email sent to the user's inbox with detailed processing statistics and feedback request.
+
+feedback_monitoring_task:
+  description: >
+    Monitor the user's inbox for replies to Gmail automation summary emails and process user feedback.
+    
+    FIRST: Search for emails that are replies to summary emails using OAuth2GetUnreadEmailsTool with a query:
+    'subject:"Re: 📧 Gmail Automation Summary" OR subject:"Gmail Automation Summary" is:unread'
+    
+    For each feedback email found:
+    
+    **FEEDBACK ANALYSIS:**
+    1. Identify the original summary email being replied to using the system identifier
+    2. Extract user feedback and categorize it:
+       - Categorization corrections ("This should have been PERSONAL not IMPORTANT")
+       - Response modifications ("Don't reply to emails from X domain") 
+       - New rules ("Always mark emails from Y as high priority")
+       - Process improvements ("Run cleanup more/less aggressively")
+       - System preferences ("Use more formal tone for business emails")
+    
+    **RULE EXTRACTION:**
+    3. Convert user feedback into specific, actionable rules:
+       - Email categorization rules
+       - Priority assignment rules  
+       - Response generation rules
+       - Organization and labeling rules
+       - Cleanup and deletion rules
+    
+    **SYSTEM UPDATES:**
+    4. Update the system configuration files:
+       - Add new rules to a 'user_learned_rules.json' file
+       - Update agent instructions with user preferences
+       - Modify task descriptions based on feedback
+    
+    **FEEDBACK RESPONSE:**
+    5. Use OAuth2SaveDraftTool to send acknowledgment email:
+       Subject: "✅ Feedback Processed - Gmail Automation Updates Applied"
+       Content: Summary of changes made based on user feedback
+    
+    **LEARNING STORAGE:**
+    6. Save all processed feedback to 'knowledge/user_feedback_history.json' for future reference
+    
+    Your final answer should be a JSON object with:
+    - feedback_emails_found: Number of feedback emails processed
+    - rules_extracted: Array of new rules learned from feedback
+    - system_updates_applied: List of configuration changes made
+    - acknowledgment_sent: Boolean indicating if response was sent to user
+    - learning_summary: Summary of what the system learned
+  expected_output: >
+    A feedback processing report showing extracted rules, system updates applied, and user acknowledgment sent.
