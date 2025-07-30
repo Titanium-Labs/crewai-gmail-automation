@@ -1,41 +1,15 @@
 categorization_task:
   description: >
-    Read the fetched emails from the 'output/fetched_emails.json' file using FileReadTool and categorize each email based on:
+    Read emails from 'output/fetched_emails.json' and categorize each by type and priority.
     
-    **CATEGORY CLASSIFICATION:**
-    1. **PERSONAL** - Emails from friends, family, or personal contacts
-    2. **NEWSLETTER** - Subscriptions, updates, news digest emails  
-    3. **PROMOTION** - Marketing emails, advertisements, sales offers
-    4. **RECEIPT** - Purchase confirmations, order receipts, payment confirmations
-    5. **IMPORTANT** - Work-related emails, official correspondence, urgent matters
-    6. **YOUTUBE** - Any email related to YouTube (comments, notifications, etc.)
-    7. **OTHER** - Emails that don't fit the above categories
+    Categories: PERSONAL, NEWSLETTER, PROMOTION, RECEIPT, IMPORTANT, YOUTUBE, OTHER
+    Priority: HIGH, MEDIUM, LOW
     
-    **PRIORITY ASSIGNMENT (STRICT RULES):**
-    - **HIGH**: Work emergencies, time-sensitive personal matters, important deadlines, urgent official correspondence
-    - **MEDIUM**: Regular work emails, personal emails from close contacts, important notifications, YouTube notifications
-    - **LOW**: Newsletters, promotions, non-urgent notifications, automated emails
+    Rules: YOUTUBE=READ_ONLY, Old promotions=LOW
     
-    **SPECIAL HANDLING:**
-    - All **YOUTUBE** emails should be marked as **READ_ONLY** (user will respond directly on YouTube)
-    - **RECEIPT** emails should typically be **MEDIUM** priority unless urgent
-    - **PROMOTION** emails are typically **LOW** priority unless from important services
-    - **NEWSLETTER** emails are **LOW** priority unless marked urgent by sender
-    
-    **EMAIL AGE CONSIDERATION:**
-    Consider the 'age_days' field when setting priority:
-    - Recent emails (0-1 days) maintain their calculated priority
-    - Older promotional emails (2+ days) should be **LOW** priority
-    - Work emails maintain priority regardless of age
-    
-    Use the 'FileReadTool' to read the emails from 'output/fetched_emails.json'.
-    
-    Your final answer should be a JSON object with:
-    - emails: Array of email objects with email_id, subject, sender, category, priority, age_days, and reasoning
-    - total_processed: Total number of emails categorized
-    - summary: Brief summary of categorization results
+    Return JSON with emails array (email_id, subject, sender, category, priority, reasoning) and summary.
   expected_output: >
-    A comprehensive categorization report in JSON format with each email properly classified by category and priority, including reasoning for each classification decision.
+    JSON categorization report with classified emails and brief reasoning.
 
 organization_task:
   description: >
@@ -138,19 +112,38 @@ response_task:
     - For technical issues: Confirm understanding and provide timeline for response
     - For client communications: Maintain professional boundaries while being helpful
     
-    MANDATORY: For each email that needs a response, you MUST use the 'OAuth2SaveDraftTool' tool:
+    MANDATORY: For each email that needs a response, follow these steps:
     
-    STEP 1: Call OAuth2SaveDraftTool with these exact parameters:
+    STEP 1: CONTEXTUAL RESEARCH - Before creating any reply, search for related emails using OAuth2GetUnreadEmailsTool:
+    - Extract the sender's email address from the current email
+    - Extract key topics/subjects from the email content (remove "Re:" prefixes)
+    - Create search query using Gmail search syntax:
+      * For sender context: "from:sender@example.com" (replace with actual sender email)
+      * For topic context: "subject:topic keywords" (replace with actual topic keywords)
+      * Combined: "from:sender@example.com OR subject:topic keywords"
+      * Example: "from:john@company.com OR subject:project proposal"
+    - Set max_emails to 5-10 to get sufficient context without overwhelming data
+    - Review the search results to understand:
+      * Previous conversations with this sender
+      * Related topics and ongoing discussions  
+      * User's typical response style and tone with this sender
+      * Any commitments, deadlines, or follow-ups mentioned in previous emails
+      * Current status of any ongoing projects or issues
+    - Use this context to craft a more informed, relevant, and personalized response
+    
+    STEP 2: Call OAuth2SaveDraftTool with these exact parameters:
     - recipient: The sender's email address (extract from sender field)
     - subject: Add "Re: " to the original subject
     - body: Your personalized response (using user persona information)
-    - in_reply_to: Use the email_id if this is a reply
+    - in_reply_to: Use the message_id from thread_info (NOT the email_id) for proper threading
+    - thread_id: Use the thread_id from thread_info to ensure reply stays in same thread
+    - references: Use the references from thread_info for complete threading
     
-    STEP 2: Verify the tool call was successful by checking the return message
+    STEP 3: Verify the tool call was successful by checking the return message
     
-    STEP 3: Only mark draft_saved as true if OAuth2SaveDraftTool returned success
+    STEP 4: Only mark draft_saved as true if OAuth2SaveDraftTool returned success
     
-    STEP 4: For emails where you successfully saved a draft, use OAuth2GmailOrganizeTool to add a star:
+    STEP 5: For emails where you successfully saved a draft, use OAuth2GmailOrganizeTool to add a star:
     - email_id: The email ID
     - star: true
     - This ensures emails with draft replies are easily identifiable
@@ -158,11 +151,12 @@ response_task:
     CRITICAL: You must actually call the OAuth2SaveDraftTool for each response. Do not just claim to have saved drafts - actually use the tool.
     
     Your final answer should be a JSON object with:
-    - emails: Array of email objects with email_id, subject, recipient, response_summary, response_needed (boolean), and draft_saved (boolean)
+    - emails: Array of email objects with email_id, subject, recipient, response_summary, response_needed (boolean), draft_saved (boolean), and context_researched (boolean)
     - total_processed: Number of emails processed
     - responses_generated: Number of responses created
+    - context_searches_performed: Number of contextual searches performed before replies
     - tool_calls_made: Number of actual OAuth2SaveDraftTool calls made
-    - summary: Brief summary of response generation results
+    - summary: Brief summary of response generation results including context research
   expected_output: >
     A comprehensive response report detailing which emails received draft responses and which were marked as no response needed, with reasoning for each decision.
 

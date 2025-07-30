@@ -9,6 +9,8 @@ import sys
 import io
 import threading
 import time
+import logging
+import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import pandas as pd
@@ -16,6 +18,23 @@ import hashlib
 import secrets
 import urllib.parse
 import base64
+
+# Configure logging to reduce verbose output
+try:
+    from configure_logging import configure_logging
+    configure_logging()
+except ImportError:
+    # Fallback to basic logging suppression
+    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+    logging.getLogger("litellm").setLevel(logging.WARNING)
+    import warnings
+    warnings.filterwarnings("ignore", message=".*missing ScriptRunContext.*")
+
+def safe_add_activity_log(message: str):
+    """Safely add a message to activity logs with initialization check."""
+    if 'activity_logs' not in st.session_state:
+        st.session_state.activity_logs = []
+    st.session_state.activity_logs.append(message)
 
 # Helper function for safe imports with detailed diagnostics
 def safe_import(module_path, alias=None):
@@ -82,7 +101,6 @@ try:
     safe_import('src.common.logger.get_logger', 'get_logger')
     safe_import('src.common.logger.exception_info', 'exception_info')
     safe_import('src.common.logger.get_auth_logger', 'get_auth_logger')
-    safe_import('src.common.logger.get_billing_logger', 'get_billing_logger')
     safe_import('src.common.logger.get_crew_logger', 'get_crew_logger')
     safe_import('src.common.logger.get_system_logger', 'get_system_logger')
     
@@ -94,12 +112,7 @@ try:
     safe_import('src.gmail_crew_ai.crew_oauth.OAuth2GmailCrewAi', 'OAuth2GmailCrewAi')
     safe_import('src.gmail_crew_ai.crew_oauth.create_crew_for_user', 'create_crew_for_user')
     safe_import('src.gmail_crew_ai.models.EmailDetails', 'EmailDetails')
-    safe_import('src.gmail_crew_ai.billing.StripeService', 'StripeService')
-    safe_import('src.gmail_crew_ai.billing.SubscriptionManager', 'SubscriptionManager')
-    safe_import('src.gmail_crew_ai.billing.UsageTracker', 'UsageTracker')
-    safe_import('src.gmail_crew_ai.billing.streamlit_billing.show_billing_tab', 'show_billing_tab')
     safe_import('src.common.security.APIKeyManager', 'APIKeyManager')
-    safe_import('src.gmail_crew_ai.billing.models.PlanType', 'PlanType')
     
 except Exception as e:
     # Final catch-all for any import errors
@@ -1448,14 +1461,6 @@ class UserManager:
         
         self.save_users(users)
         
-        # Create subscription for the user
-        try:
-            if hasattr(st.session_state, 'subscription_manager') and st.session_state.subscription_manager:
-                subscription_manager = st.session_state.subscription_manager
-                subscription_manager.create_user_subscription(user_id, email, PlanType.FREE)
-                log.info(f"Created free subscription for user: {email}")
-        except Exception as e:
-            log.error(f"Failed to create subscription for user {email}: {e}")
         
         return True
     
@@ -2682,12 +2687,12 @@ def show_dashboard():
     
     st.markdown("---")
     
-    # Create tabs - admin tab only visible to admin users
+    # Create tabs - admin tab only visible to admin users (removed billing)
     if is_admin:
-        tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "💳 Billing", "⚙️ Settings", "👑 Admin Panel"]
+        tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "⚙️ Settings", "👑 Admin Panel"]
         tabs = st.tabs(tab_names)
     else:
-        tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "💳 Billing", "⚙️ Settings"]
+        tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "⚙️ Settings"]
         tabs = st.tabs(tab_names)
     
     # Email Processing Tab
@@ -2702,20 +2707,13 @@ def show_dashboard():
     with tabs[2]:
         show_reports_tab(user_id, oauth_manager)
     
-    # Billing Tab
-    with tabs[3]:
-        if st.session_state.subscription_manager and st.session_state.usage_tracker:
-            show_billing_tab(st.session_state.subscription_manager, st.session_state.usage_tracker, user_id)
-        else:
-            st.warning("💳 Billing system not configured. Please add Stripe configuration to your .env file.")
-    
     # Settings Tab
-    with tabs[4]:
+    with tabs[3]:
         show_settings_tab(user_id, oauth_manager)
     
     # Admin Panel Tab (only for admin users)
     if is_admin:
-        with tabs[5]:
+        with tabs[4]:
             show_admin_panel_tab(user_id, oauth_manager)
 
 
@@ -2912,8 +2910,20 @@ def show_reports_tab(user_id: str, oauth_manager):
     st.markdown("## 📊 Processing Reports")
     st.markdown("View results from your email processing sessions")
     
-    # Show latest processing reports (existing functionality)
-    show_latest_processing_reports()
+    # Create tabs for different report types
+    report_tabs = st.tabs(["📋 Processing Reports", "💰 Token Usage", "📈 Analytics"])
+    
+    with report_tabs[0]:
+        # Show latest processing reports (existing functionality)
+        show_latest_processing_reports()
+    
+    with report_tabs[1]:
+        # Show token usage reports
+        show_token_usage_report(user_id)
+    
+    with report_tabs[2]:
+        # Show analytics and trends
+        show_processing_analytics(user_id)
 
 
 def show_admin_panel_tab(user_id: str, oauth_manager):
@@ -3045,6 +3055,22 @@ def show_admin_panel_tab(user_id: str, oauth_manager):
         
         if st.button("📊 Show System Status"):
             st.info("System is running normally")
+            
+        # Debug Mode Toggle (Admin Only)
+        st.markdown("#### 🐛 Debug Settings")
+        debug_enabled = st.checkbox(
+            "Enable Debug Mode", 
+            value=st.session_state.get('debug_mode', False),
+            help="Show activity logs and debug information during email processing"
+        )
+        
+        if debug_enabled != st.session_state.get('debug_mode', False):
+            st.session_state.debug_mode = debug_enabled
+            if debug_enabled:
+                st.success("🐛 Debug mode enabled - activity logs will be visible")
+            else:
+                st.success("✅ Debug mode disabled - UI cleaned up")
+            st.rerun()
     
     st.markdown("---")
     
@@ -3070,8 +3096,8 @@ def init_session_state():
         'email_rules': [],
         'session_initialized': False,
         'gmail_search': 'is:unread',
-        'filter_max_emails': 10,
-        'selected_model': os.getenv('MODEL', 'anthropic/claude-4-sonnet')
+        'filter_max_emails': 3,
+        'selected_model': os.getenv('MODEL', 'openai/gpt-4.1')
     }
     
     for key, value in defaults.items():
@@ -3217,7 +3243,7 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
     with col8:
         # Initialize session state if not exists
         if 'filter_max_emails' not in st.session_state:
-            st.session_state.filter_max_emails = 10
+            st.session_state.filter_max_emails = 3
             
         max_emails = st.number_input(
             "Max Emails", 
@@ -3253,22 +3279,29 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
             st.button(" Stop", disabled=True, key="stop_disabled")
     
 
-    # Activity Window - Always visible  
+    # Always show status section, with different detail levels based on debug mode
     st.markdown("---")
-    st.markdown("### 📺 Activity Window")
-    st.markdown("*Real-time AI processing updates*")
     
     # Initialize activity window state
     if 'activity_logs' not in st.session_state:
         st.session_state.activity_logs = []
     if 'activity_placeholder' not in st.session_state:
         st.session_state.activity_placeholder = None
+    if 'debug_mode' not in st.session_state:
+        st.session_state.debug_mode = False
     
-    # Real-time activity container
-    activity_container = st.container()
+    if st.session_state.get('debug_mode', False):
+        st.markdown("### 📺 Activity Window (Debug Mode)")
+        st.markdown("*Real-time AI processing updates*")
+        # Real-time activity container
+        activity_container = st.container()
+    else:
+        st.markdown("### 📊 Processing Status")
+        # Simplified status container
+        activity_container = st.container()
     
     with activity_container:
-        # Show current status
+        # Always show detailed activity logs (removed debug mode restriction)
         if st.session_state.processing_active:
             if st.session_state.get('processing_started', False):
                 pass  # Processing status shown in activity logs
@@ -3279,7 +3312,7 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
         else:
             pass  # No status needed when ready
         
-        # Live activity log with auto-scroll
+        # Live activity log with auto-scroll - always visible
         activity_placeholder = st.empty()
         
         # Display activity logs
@@ -3333,8 +3366,8 @@ def show_email_processing_tab(user_id: str, oauth_manager: OAuth2Manager):
             st.session_state.processing_stopped = False
             st.rerun()
     
-    # Clear logs button
-    if st.session_state.activity_logs:
+    # Clear logs button (only in debug mode)
+    if st.session_state.get('debug_mode', False) and st.session_state.activity_logs:
         if st.button("🗑️ Clear Activity Log"):
             st.session_state.activity_logs = []
             st.rerun()
@@ -3715,6 +3748,190 @@ def show_latest_processing_reports():
                 st.divider()
     else:
         st.info(" No processing reports available yet.")
+
+
+def show_token_usage_report(user_id: str):
+    """Show token usage report for the user."""
+    st.markdown("### 💰 Token Usage & Costs")
+    
+    try:
+        # Try to import token tracker
+        from src.gmail_crew_ai.utils.token_tracker import token_tracker
+        
+        # Get usage summary
+        usage_summary = token_tracker.get_usage_summary(user_id)
+        
+        if usage_summary['total_sessions'] == 0:
+            st.info("No token usage data available yet. Process some emails to see usage statistics.")
+            return
+        
+        # Display overview metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "Total Sessions",
+                f"{usage_summary['total_sessions']:,}",
+                help="Total number of email processing sessions"
+            )
+        
+        with col2:
+            st.metric(
+                "Total Tokens Used",
+                f"{usage_summary['total_tokens']:,}",
+                help="Total tokens consumed across all sessions"
+            )
+        
+        with col3:
+            st.metric(
+                "Total Cost",
+                f"${usage_summary['total_cost']:.4f}",
+                help="Estimated total cost based on model pricing"
+            )
+        
+        with col4:
+            st.metric(
+                "Avg Cost/Session",
+                f"${usage_summary['avg_cost_per_session']:.4f}",
+                help="Average cost per email processing session"
+            )
+        
+        # Show recent sessions
+        st.markdown("---")
+        st.markdown("#### Recent Sessions")
+        
+        recent_sessions = usage_summary.get('recent_sessions', [])
+        if recent_sessions:
+            # Create a dataframe for display
+            session_data = []
+            for session in recent_sessions[-10:]:  # Last 10 sessions
+                session_data.append({
+                    "Date": datetime.fromisoformat(session['start_time']).strftime("%Y-%m-%d %H:%M"),
+                    "Model": session.get('model', 'Unknown'),
+                    "Emails": session.get('emails_processed', 0),
+                    "Tokens": f"{session.get('total_tokens', 0):,}",
+                    "Cost": f"${session.get('total_cost', 0):.4f}",
+                    "Avg/Email": f"${session.get('avg_cost_per_email', 0):.4f}"
+                })
+            
+            df_sessions = pd.DataFrame(session_data)
+            st.dataframe(df_sessions, use_container_width=True, hide_index=True)
+            
+            # Show agent breakdown for the most recent session
+            if recent_sessions:
+                latest_session = recent_sessions[-1]
+                if latest_session.get('agents'):
+                    st.markdown("---")
+                    st.markdown("#### Latest Session Agent Breakdown")
+                    
+                    agent_data = []
+                    for agent_name, stats in latest_session['agents'].items():
+                        agent_data.append({
+                            "Agent": agent_name,
+                            "Calls": stats['calls'],
+                            "Input Tokens": f"{stats['input_tokens']:,}",
+                            "Output Tokens": f"{stats['output_tokens']:,}",
+                            "Total Tokens": f"{stats['total_tokens']:,}",
+                            "Cost": f"${stats['cost']:.4f}"
+                        })
+                    
+                    df_agents = pd.DataFrame(agent_data)
+                    st.dataframe(df_agents, use_container_width=True, hide_index=True)
+        
+        # Rate limit warnings
+        st.markdown("---")
+        st.markdown("#### Rate Limit Information")
+        
+        model = os.getenv('MODEL', 'anthropic/claude-sonnet-4-20250514')
+        if 'claude' in model:
+            st.warning("""
+            **Anthropic Rate Limits:**
+            - 30,000-40,000 input tokens per minute
+            - Reduce email batch size if you encounter rate limits
+            - Consider upgrading your Anthropic plan for higher limits
+            """)
+        
+    except ImportError:
+        st.error("Token tracking module not available. Creating simple usage display...")
+        # Fallback display
+        st.info("Token usage tracking will be available in the next update.")
+    except Exception as e:
+        st.error(f"Error loading token usage data: {e}")
+
+
+def show_processing_analytics(user_id: str):
+    """Show analytics and trends for email processing."""
+    st.markdown("### 📈 Processing Analytics")
+    
+    # Check if we have any output files
+    if not os.path.exists("output"):
+        st.info("No analytics data available yet. Process some emails to see trends.")
+        return
+    
+    try:
+        # Analyze categorization trends
+        cat_file = os.path.join("output", "categorization_report.json")
+        if os.path.exists(cat_file):
+            with open(cat_file, 'r') as f:
+                cat_data = json.load(f)
+            
+            if cat_data and 'emails' in cat_data:
+                # Count categories
+                categories = {}
+                priorities = {}
+                
+                for email in cat_data['emails']:
+                    cat = email.get('category', 'Unknown')
+                    categories[cat] = categories.get(cat, 0) + 1
+                    
+                    pri = email.get('priority', 'Unknown')
+                    priorities[pri] = priorities.get(pri, 0) + 1
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("#### Email Categories")
+                    cat_df = pd.DataFrame([
+                        {"Category": k, "Count": v} 
+                        for k, v in categories.items()
+                    ])
+                    if not cat_df.empty:
+                        st.bar_chart(cat_df.set_index('Category'))
+                
+                with col2:
+                    st.markdown("#### Priority Distribution")
+                    pri_df = pd.DataFrame([
+                        {"Priority": k, "Count": v} 
+                        for k, v in priorities.items()
+                    ])
+                    if not pri_df.empty:
+                        st.bar_chart(pri_df.set_index('Priority'))
+        
+        # Show cleanup statistics
+        cleanup_file = os.path.join("output", "cleanup_report.json")
+        if os.path.exists(cleanup_file):
+            with open(cleanup_file, 'r') as f:
+                cleanup_data = json.load(f)
+            
+            st.markdown("---")
+            st.markdown("#### Cleanup Statistics")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                deleted = len(cleanup_data.get('deleted_emails', []))
+                st.metric("Emails Deleted", deleted)
+            
+            with col2:
+                archived = len(cleanup_data.get('archived_emails', []))
+                st.metric("Emails Archived", archived)
+            
+            with col3:
+                total_cleaned = deleted + archived
+                st.metric("Total Cleaned", total_cleaned)
+    
+    except Exception as e:
+        st.error(f"Error loading analytics: {e}")
 
 
 def show_processing_history_enhanced():
@@ -4592,7 +4809,7 @@ def show_error_logs_tab(user_id: str, oauth_manager: OAuth2Manager):
 
 def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
     """Show settings interface."""
-    st.markdown("##  Settings")
+    st.markdown("## ⚙️ Settings")
     
     # User info - get OAuth user ID from session state
     oauth_user_id = st.session_state.get('current_user')
@@ -4600,222 +4817,215 @@ def show_settings_tab(user_id: str, oauth_manager: OAuth2Manager):
         user_email = oauth_manager.get_user_email(oauth_user_id)
     else:
         user_email = "Unknown"
-    st.markdown(f"**Current User:** {user_email}")
-    st.markdown(f"**User ID:** {user_id}")
+    
+    # Compact user info display
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown(f"**User:** {user_email} (`{user_id}`)")
     
     st.markdown("---")
     
-    # Model selection settings
-    st.markdown("### 🤖 AI Model Configuration")
+    # Simple Model Selection
+    st.markdown("### 🤖 Model Selection")
     
-    # Available models with descriptions
-    model_options = {
-        "Claude 4 Sonnet": {
-            "value": "anthropic/claude-4-sonnet",
-            "description": "Latest Claude model, excellent reasoning and email understanding",
-            "api_key_env": "ANTHROPIC_API_KEY"
-        },
-        "Claude 3.5 Sonnet": {
-            "value": "anthropic/claude-3-5-sonnet-20241022", 
-            "description": "Fast and capable, great for email automation",
-            "api_key_env": "ANTHROPIC_API_KEY"
-        },
-        "GPT-4o": {
-            "value": "openai/gpt-4o",
-            "description": "High-quality OpenAI model, slower but very capable",
-            "api_key_env": "OPENAI_API_KEY"
-        },
-        "GPT-4o-mini": {
-            "value": "openai/gpt-4o-mini",
-            "description": "Fast and cost-effective OpenAI model, good for email tasks",
-            "api_key_env": "OPENAI_API_KEY"
-        },
-        "GPT-4": {
-            "value": "openai/gpt-4",
-            "description": "Original GPT-4, reliable but slower and more expensive",
-            "api_key_env": "OPENAI_API_KEY"
-        }
-    }
+    # Simple model options
+    models = [
+        "openai/gpt-4.1",
+        "anthropic/claude-opus-4-20250514",
+        "anthropic/claude-sonnet-4-20250514",
+        "anthropic/claude-3-7-sonnet-latest",
+        "anthropic/claude-3-5-sonnet-latest",
+        "anthropic/claude-3-5-haiku-latest",
+        "anthropic/claude-3-5-sonnet-20241022",
+        "openai/o4-mini",
+        "openai/o3-pro",
+        "openai/o3",
+        "openai/o3-mini",
+        "openai/gpt-4o",
+        "openai/gpt-4o-audio",
+        "openai/chatgpt-4o",
+        "openai/gpt-4o-mini"
+    ]
     
     # Initialize session state for model selection
     if 'selected_model' not in st.session_state:
-        st.session_state.selected_model = os.getenv('MODEL', 'anthropic/claude-4-sonnet')
+        st.session_state.selected_model = os.getenv('MODEL', 'openai/gpt-4.1')
     
-    # Model selection
-    current_model_name = None
-    for name, config in model_options.items():
-        if config['value'] == st.session_state.selected_model:
-            current_model_name = name
-            break
+    # Simple model selection dropdown
+    current_index = 0
+    if st.session_state.selected_model in models:
+        current_index = models.index(st.session_state.selected_model)
     
-    if not current_model_name:
-        current_model_name = "Claude 4 Sonnet"  # Default fallback
-    
-    selected_model_name = st.selectbox(
+    selected_model = st.selectbox(
         "Select AI Model",
-        options=list(model_options.keys()),
-        index=list(model_options.keys()).index(current_model_name),
+        options=models,
+        index=current_index
     )
     
-    selected_model_config = model_options[selected_model_name]
-    selected_model_value = selected_model_config['value']
-    
-    # Show model description with inline status (check user-specific API keys)
-    required_api_key = selected_model_config['api_key_env']
-    user_manager = st.session_state.user_manager
-    
-    # Check if user has their own API key or fallback is available
-    user_has_key = user_manager.has_user_api_key(user_id, required_api_key)
-    fallback_key = bool(os.getenv(required_api_key))
-    api_key_available = user_has_key or fallback_key
-    
-    if user_has_key:
-        status_icon = "🔑"  # User has their own key
-        key_source = " (Your Key)"
-    elif fallback_key:
-        status_icon = "🌐"  # Using fallback
-        key_source = " (Fallback)"
-    else:
-        status_icon = "❌"  # No key available
-        key_source = ""
-    
-    st.markdown(f"{status_icon} **{selected_model_name}**: {selected_model_config['description']}{key_source}")
-    
     # Update model if changed
-    if selected_model_value != st.session_state.selected_model:
-        st.session_state.selected_model = selected_model_value
-        os.environ['MODEL'] = selected_model_value
+    if selected_model != st.session_state.selected_model:
+        st.session_state.selected_model = selected_model
+        os.environ['MODEL'] = selected_model
         st.rerun()
     
     # Set current model in environment if not already set
     if not os.getenv('MODEL') or os.getenv('MODEL') != st.session_state.selected_model:
         os.environ['MODEL'] = st.session_state.selected_model
-        log.debug(f"Environment MODEL set to: {st.session_state.selected_model}")
+        log.debug(f"Environment MODEL updated to: {st.session_state.selected_model}")
     
-    st.markdown("---")
-    
-    # API Key Configuration
-    st.markdown("### 🔑 API Key Configuration")
-    st.markdown("Configure your AI model API keys. These will be stored securely in your environment.")
-    
-    # Initialize session state for API keys
-    if 'api_keys_updated' not in st.session_state:
-        st.session_state.api_keys_updated = False
-    
-    # Create columns for API key inputs
-    col1, col2 = st.columns(2)
-    
+    # Simplified API Key Configuration
     user_manager = st.session_state.user_manager
     current_user_id = st.session_state.authenticated_user_id
     
+    # Create columns for API key inputs
+    col1, col2, col3 = st.columns(3)
+    
     with col1:
-        st.markdown("#### Anthropic API Key")
-        
-        # Get user's API key or fallback to env
+        # Get current Anthropic key status
         user_anthropic_key = user_manager.get_user_api_key(current_user_id, 'anthropic')
         env_anthropic_key = os.getenv('ANTHROPIC_API_KEY', '')
         
-        # Determine current key and source
         if user_anthropic_key:
-            current_anthropic_key = user_anthropic_key
-            key_source = "🔑 Your key"
+            status = "🔑 Your key"
         elif env_anthropic_key:
-            current_anthropic_key = env_anthropic_key
-            key_source = "🌐 Default key"
+            status = "🌐 Default key"
         else:
-            current_anthropic_key = ''
-            key_source = "❌ Not configured"
+            status = "❌ Not configured"
+            
+        st.markdown(f"**Anthropic API Key** {status}")
         
-        # Use secure masking if available
-        if user_manager.api_key_manager and current_anthropic_key:
-            masked_anthropic = user_manager.api_key_manager.mask_api_key(current_anthropic_key)
-        else:
-            masked_anthropic = current_anthropic_key[:8] + '...' + current_anthropic_key[-4:] if current_anthropic_key else ''
+        # Show current key if exists
+        current_key_display = ""
+        if user_anthropic_key:
+            if user_manager.api_key_manager:
+                current_key_display = user_manager.api_key_manager.mask_api_key(user_anthropic_key)
+            else:
+                current_key_display = user_anthropic_key[:8] + '...' + user_anthropic_key[-4:]
         
-        st.markdown(f"**Status**: {key_source}")
-        
-        anthropic_key = st.text_input(
-            "Your Anthropic API Key", 
-            value=masked_anthropic if user_anthropic_key else '',
-            type="password",
-            placeholder="sk-ant-api03-..."
-        )
-        
-        # Save/Remove buttons
-        col1a, col1b = st.columns(2)
-        with col1a:
-            if st.button("💾 Save", key="save_anthropic"):
-                if anthropic_key and anthropic_key != masked_anthropic:
-                    if user_manager.set_user_api_key(current_user_id, 'anthropic', anthropic_key):
-                        st.success("✅ Anthropic API key saved!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to save API key")
-                elif not anthropic_key:
-                    st.warning("Please enter an API key")
-        
-        with col1b:
-            if user_anthropic_key and st.button("🗑️ Remove", key="remove_anthropic"):
-                if user_manager.remove_user_api_key(current_user_id, 'anthropic'):
-                    st.success("✅ Your API key removed! Using default key.")
+        # Use form for Enter key submission
+        with st.form(key="anthropic_form", clear_on_submit=True):
+            anthropic_key = st.text_input(
+                "API Key",
+                value=current_key_display,
+                type="password",
+                placeholder="sk-ant-api03-... (press Enter to save)",
+                label_visibility="collapsed"
+            )
+            # Hidden submit button (form still submits on Enter) 
+            submitted = st.form_submit_button("Save", disabled=False, use_container_width=False, type="primary")
+            # Hide the button with CSS
+            st.markdown("""
+            <style>
+            div[data-testid="stFormSubmitButton"] {
+                display: none;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            if submitted and anthropic_key and anthropic_key != current_key_display:
+                if user_manager.set_user_api_key(current_user_id, 'anthropic', anthropic_key):
+                    st.success("✅ Anthropic API key saved!")
                     st.rerun()
                 else:
-                    st.error("❌ Failed to remove API key")
+                    st.error("❌ Invalid API key format")
     
     with col2:
-        st.markdown("#### OpenAI API Key")
-        
-        # Get user's API key or fallback to env
+        # Get current OpenAI key status
         user_openai_key = user_manager.get_user_api_key(current_user_id, 'openai')
         env_openai_key = os.getenv('OPENAI_API_KEY', '')
         
-        # Determine current key and source
         if user_openai_key:
-            current_openai_key = user_openai_key
-            key_source = "🔑 Your key"
+            status = "🔑 Your key"
         elif env_openai_key:
-            current_openai_key = env_openai_key
-            key_source = "🌐 Default key"
+            status = "🌐 Default key"
         else:
-            current_openai_key = ''
-            key_source = "❌ Not configured"
+            status = "❌ Not configured"
+            
+        st.markdown(f"**OpenAI API Key** {status}")
         
-        # Use secure masking if available
-        if user_manager.api_key_manager and current_openai_key:
-            masked_openai = user_manager.api_key_manager.mask_api_key(current_openai_key)
-        else:
-            masked_openai = current_openai_key[:8] + '...' + current_openai_key[-4:] if current_openai_key else ''
+        # Show current key if exists
+        current_key_display = ""
+        if user_openai_key:
+            if user_manager.api_key_manager:
+                current_key_display = user_manager.api_key_manager.mask_api_key(user_openai_key)
+            else:
+                current_key_display = user_openai_key[:8] + '...' + user_openai_key[-4:]
         
-        st.markdown(f"**Status**: {key_source}")
-        
-        openai_key = st.text_input(
-            "Your OpenAI API Key",
-            value=masked_openai if user_openai_key else '',
-            type="password", 
-            placeholder="sk-proj-..."
-        )
-        
-        # Save/Remove buttons
-        col2a, col2b = st.columns(2)
-        with col2a:
-            if st.button("💾 Save", key="save_openai"):
-                if openai_key and openai_key != masked_openai:
-                    if user_manager.set_user_api_key(current_user_id, 'openai', openai_key):
-                        st.success("✅ OpenAI API key saved!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to save API key")
-                elif not openai_key:
-                    st.warning("Please enter an API key")
-        
-        with col2b:
-            if user_openai_key and st.button("🗑️ Remove", key="remove_openai"):
-                if user_manager.remove_user_api_key(current_user_id, 'openai'):
-                    st.success("✅ Your API key removed! Using default key.")
+        # Use form for Enter key submission
+        with st.form(key="openai_form", clear_on_submit=True):
+            openai_key = st.text_input(
+                "API Key",
+                value=current_key_display,
+                type="password",
+                placeholder="sk-proj-... (press Enter to save)",
+                label_visibility="collapsed"
+            )
+            # Hidden submit button (form still submits on Enter) 
+            submitted = st.form_submit_button("Save", disabled=False, use_container_width=False, type="primary")
+            # Hide the button with CSS
+            st.markdown("""
+            <style>
+            div[data-testid="stFormSubmitButton"] {
+                display: none;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            if submitted and openai_key and openai_key != current_key_display:
+                if user_manager.set_user_api_key(current_user_id, 'openai', openai_key):
+                    st.success("✅ OpenAI API key saved!")
                     st.rerun()
                 else:
-                    st.error("❌ Failed to remove API key")
+                    st.error("❌ Invalid API key format")
     
+    with col3:
+        # Get current DO AI key status
+        user_do_ai_key = user_manager.get_user_api_key(current_user_id, 'do_ai')
+        env_do_ai_key = os.getenv('DO_AI_API_KEY', '')
+        
+        if user_do_ai_key:
+            status = "🔑 Your key"
+        elif env_do_ai_key:
+            status = "🌐 Default key"
+        else:
+            status = "❌ Not configured"
+            
+        st.markdown(f"**Digital Ocean AI Key** {status}")
+        
+        # Show current key if exists
+        current_key_display = ""
+        if user_do_ai_key:
+            if user_manager.api_key_manager:
+                current_key_display = user_manager.api_key_manager.mask_api_key(user_do_ai_key)
+            else:
+                current_key_display = user_do_ai_key[:8] + '...' + user_do_ai_key[-4:]
+        
+        # Use form for Enter key submission
+        with st.form(key="do_ai_form", clear_on_submit=True):
+            do_ai_key = st.text_input(
+                "API Key",
+                value=current_key_display,
+                type="password",
+                placeholder="Lw_7A8P-... (press Enter to save)",
+                label_visibility="collapsed"
+            )
+            # Hidden submit button (form still submits on Enter) 
+            submitted = st.form_submit_button("Save", disabled=False, use_container_width=False, type="primary")
+            # Hide the button with CSS
+            st.markdown("""
+            <style>
+            div[data-testid="stFormSubmitButton"] {
+                display: none;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            if submitted and do_ai_key and do_ai_key != current_key_display:
+                if user_manager.set_user_api_key(current_user_id, 'do_ai', do_ai_key):
+                    st.success("✅ DO AI API key saved!")
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid API key format")
     
     st.markdown("---")
     
@@ -5151,61 +5361,10 @@ def process_emails_with_filters(user_id: str, oauth_manager):
         st.session_state.processing_stopped = False
         return
     
-    # Check subscription limits before processing
-    if st.session_state.subscription_manager and st.session_state.usage_tracker:
-        subscription_manager = st.session_state.subscription_manager
-        usage_tracker = st.session_state.usage_tracker
-        
-        # Get user's authenticated ID for subscription check
-        authenticated_user_id = st.session_state.authenticated_user_id
-        
-        try:
-            # Check if user can process more emails (admin users have unlimited access)
-            user_manager = st.session_state.user_manager
-            if not usage_tracker.can_process_more_emails(authenticated_user_id, user_manager):
-                usage_record = usage_tracker.get_usage_for_today(authenticated_user_id, user_manager)
-                plan_name = subscription_manager.get_subscription_plan_name(authenticated_user_id)
-                
-                st.session_state.activity_logs.append(
-                    f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Daily email limit reached ({usage_record.emails_processed}/{usage_record.daily_limit})"
-                )
-                
-                st.warning(f" You've reached your daily email processing limit ({usage_record.emails_processed}/{usage_record.daily_limit}) for your {plan_name} plan.")
-                st.info(" Upgrade your subscription in the Billing tab to process more emails.")
-                
-                # Reset processing state
-                st.session_state.processing_active = False
-                st.session_state.processing_started = False
-                st.session_state.processing_stopped = False
-                return
-            
-            # Log current usage
-            user_manager = st.session_state.user_manager
-            usage_record = usage_tracker.get_usage_for_today(authenticated_user_id, user_manager)
-            
-            # Show different message for admin users
-            if user_manager.is_admin(authenticated_user_id):
-                st.session_state.activity_logs.append(
-                    f"[{datetime.now().strftime('%H:%M:%S')}] 👑 Admin user: Unlimited email processing"
-                )
-            else:
-                st.session_state.activity_logs.append(
-                    f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Daily usage: {usage_record.emails_processed}/{usage_record.daily_limit}"
-                )
-            
-        except Exception as usage_error:
-            # Log the billing error but continue processing
-            st.session_state.activity_logs.append(
-                f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Warning: Billing system error: {str(usage_error)}"
-            )
-            st.session_state.activity_logs.append(
-                f"[{datetime.now().strftime('%H:%M:%S')}] ▶️ Continuing with processing (billing check failed)"
-            )
-            st.warning(f" Warning: Billing system error: {str(usage_error)}")
     
     # Parse Gmail search query into structured filters
     gmail_search = st.session_state.get('gmail_search', 'is:unread')
-    max_emails = st.session_state.get('filter_max_emails', 10)
+    max_emails = st.session_state.get('filter_max_emails', 3)
     
     parser = GmailSearchParser()
     filters = parser.parse_search(gmail_search)
@@ -5218,11 +5377,12 @@ def process_emails_with_filters(user_id: str, oauth_manager):
     activity_placeholder = st.empty()
     
     try:
-        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Fetching emails with applied filters...")
+        safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Fetching emails with applied filters...")
+        safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Email limit set to: {filters.get('max_emails', 'undefined')} emails")
         
         # Check for stop signal during processing
         if st.session_state.get('processing_stopped', False):
-            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🛑 Processing stopped before email fetch")
+            safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🛑 Processing stopped before email fetch")
             st.session_state.processing_active = False
             st.session_state.processing_started = False
             st.session_state.processing_stopped = False
@@ -5256,13 +5416,13 @@ def process_emails_with_filters(user_id: str, oauth_manager):
         if 'selected_model' in st.session_state and st.session_state.selected_model:
             selected_model = st.session_state.selected_model
             os.environ['MODEL'] = selected_model
-            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Setting AI model: {selected_model}")
+            safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Setting AI model: {selected_model}")
             log.info(f"Pre-crew MODEL environment set to: {selected_model}")
         else:
             # Fallback to default
-            default_model = "anthropic/claude-4-sonnet"
+            default_model = "openai/gpt-4.1"
             os.environ['MODEL'] = default_model
-            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Using default AI model: {default_model}")
+            safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Using default AI model: {default_model}")
             log.warning(f"No selected model found, using default: {default_model}")
         
         # Get user's API keys for the crew
@@ -5272,6 +5432,8 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             user_api_keys['anthropic'] = user_manager.get_user_api_key(user_id, 'anthropic')
         if user_manager.has_user_api_key(user_id, 'openai'):
             user_api_keys['openai'] = user_manager.get_user_api_key(user_id, 'openai')
+        if user_manager.has_user_api_key(user_id, 'do_ai'):
+            user_api_keys['do_ai'] = user_manager.get_user_api_key(user_id, 'do_ai')
         
         # Create a crew for this specific user (now with correct MODEL env var and user API keys)
         crew = create_crew_for_user(user_id, oauth_manager, user_api_keys)
@@ -5307,6 +5469,14 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                     self.content = []
                     
                 def write(self, text):
+                    # Save original stdout to avoid recursion
+                    if not hasattr(self, '_original_stdout'):
+                        self._original_stdout = sys.__stdout__
+                    
+                    # Print to terminal using original stdout
+                    self._original_stdout.write(text)
+                    self._original_stdout.flush()
+                    
                     if text.strip():  # Only capture non-empty lines
                         # Format and add to activity logs
                         formatted_text = self._format_crew_output(text.strip())
@@ -5314,10 +5484,19 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                             timestamp = datetime.now().strftime('%H:%M:%S')
                             st.session_state.activity_logs.append(f"[{timestamp}] {formatted_text}")
                             self.content.append(text.strip())
+                        else:
+                            # For debugging: show ALL output temporarily
+                            timestamp = datetime.now().strftime('%H:%M:%S')
+                            st.session_state.activity_logs.append(f"[{timestamp}] 🔍 RAW: {text.strip()}")
                     return len(text)
+                
+                def flush(self):
+                    # Ensure output is flushed
+                    pass
                     
                 def _format_crew_output(self, text):
                     """Format CrewAI output for better readability in activity window."""
+                    # Make sure text is visible and properly formatted
                     # Skip LiteLLM debug messages and other noise
                     skip_patterns = [
                         "LiteLLM:",
@@ -5327,7 +5506,9 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                         "Fetched and sorted",
                         "Error fetching emails with OAuth2",
                         "utils.py:",
-                        "__pycache__"
+                        "__pycache__",
+                        "cost_calculator.py:",
+                        "selected model name for cost calculation:"
                     ]
                     
                     for pattern in skip_patterns:
@@ -5335,8 +5516,34 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                             return None
                     
                     # Format different types of CrewAI messages
-                    if "🚀 Crew:" in text:
-                        return f"🤖 {text}"
+                    if "Working Agent:" in text:
+                        agent_name = text.split("Working Agent:")[-1].strip()
+                        return f"👤 Agent: {agent_name}"
+                    elif "Starting Task:" in text:
+                        task_name = text.split("Starting Task:")[-1].strip()
+                        return f"📋 Task: {task_name}"
+                    elif "> Entering new CrewAgentExecutor chain..." in text:
+                        return "🚀 Starting new agent execution..."
+                    elif "Thought:" in text:
+                        thought = text.split("Thought:")[-1].strip()
+                        return f"💭 Thinking: {thought}"
+                    elif "Action:" in text and "Action Input:" not in text:
+                        action = text.split("Action:")[-1].strip()
+                        return f"🎯 Action: {action}"
+                    elif "Action Input:" in text:
+                        input_data = text.split("Action Input:")[-1].strip()
+                        if len(input_data) > 100:
+                            input_data = input_data[:100] + "..."
+                        return f"📝 Input: {input_data}"
+                    elif "Final Answer:" in text:
+                        answer = text.split("Final Answer:")[-1].strip()
+                        if len(answer) > 200:
+                            answer = answer[:200] + "..."
+                        return f"✅ Result: {answer}"
+                    elif "> Finished chain." in text:
+                        return "✔️ Agent task completed"
+                    elif "🚀 Crew:" in text:
+                        return text
                     elif "📋 Task:" in text or "Task:" in text:
                         return f"📋 {text}"
                     elif "Agent:" in text:
@@ -5347,10 +5554,9 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                         return f"✅ {text}"
                     elif "Tool Execution" in text:
                         return f"🛠️ {text}"
-                    elif "Final Answer" in text:
-                        return f"💡 {text}"
-                    elif "Using Tool:" in text:
-                        return f"🔧 {text}"
+                    elif "Using tool:" in text:
+                        tool_name = text.split("Using tool:")[-1].strip()
+                        return f"🔧 Using tool: {tool_name}"
                     elif "Successfully" in text:
                         return f"✅ {text}"
                     elif "Error" in text and len(text) < 100:  # Only short error messages
@@ -5359,19 +5565,183 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                         return text  # Already formatted
                     else:
                         # For other messages, add a generic icon if they seem important
-                        if len(text) > 10 and any(word in text.lower() for word in ['processing', 'analyzing', 'generating', 'organizing']):
+                        if len(text) > 5 and any(word in text.lower() for word in ['processing', 'analyzing', 'generating', 'organizing', 'categorizing', 'found', 'email', 'crew', 'agent', 'task', 'executing', 'running', 'complete']):
                             return f"⚡ {text}"
+                        # Show any text that might be CrewAI output
+                        elif len(text) > 5 and not any(skip in text for skip in ['HTTP', 'Request', 'Response', 'Status']):
+                            return f"📝 {text}"
                     
                     return None
             
             # Set up output capture
             activity_capture = ActivityLogCapture()
             
+            # Also set up CrewAI logging to capture to activity window
+            import logging
+            
+            # Create a custom handler that writes to activity logs
+            class ActivityLogHandler(logging.Handler):
+                def emit(self, record):
+                    try:
+                        msg = self.format(record)
+                        if any(keyword in msg.lower() for keyword in ['agent', 'task', 'crew', 'working', 'executing', 'processing']):
+                            timestamp = datetime.now().strftime('%H:%M:%S')
+                            st.session_state.activity_logs.append(f"[{timestamp}] 🤖 {msg}")
+                    except Exception:
+                        pass
+            
+            # Add handler to CrewAI logger and enable verbose output
+            crewai_logger = logging.getLogger('crewai')
+            activity_handler = ActivityLogHandler()
+            activity_handler.setLevel(logging.DEBUG)
+            crewai_logger.addHandler(activity_handler)
+            crewai_logger.setLevel(logging.DEBUG)
+            
+            # Also enable verbose output for CrewAI
+            os.environ['CREWAI_VERBOSE'] = 'true'
+            os.environ['LANGCHAIN_VERBOSE'] = 'true'
+            
             # Model is already set before crew creation
             
             # Redirect stdout to capture CrewAI output
-            with contextlib.redirect_stdout(activity_capture):
-                result = crew.crew().kickoff()
+            # Suppress Streamlit ScriptRunContext warnings in threading
+            import warnings
+            
+            # Implement retry logic with rate limiting
+            max_retries = 3
+            retry_delay = 60  # Start with 60 seconds
+            
+            for attempt in range(max_retries):
+                try:
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", message=".*missing ScriptRunContext.*")
+                        warnings.filterwarnings("ignore", message=".*Thread.*missing ScriptRunContext.*")
+                        warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
+                        warnings.filterwarnings("ignore", message=".*cannot schedule new futures after shutdown.*")
+                        warnings.filterwarnings("ignore", category=UserWarning)
+                        warnings.filterwarnings("ignore", category=RuntimeWarning)
+                        
+                        # Add manual progress updates
+                        safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 CrewAI kickoff initiated...")
+                        safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 📧 Processing {filters['max_emails']} emails with search: {filters.get('gmail_search', 'is:unread')}")
+                        safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 Model: {os.getenv('MODEL', 'default')}")
+                        
+                        # Try to capture both stdout and stderr
+                        original_stdout = sys.stdout
+                        original_stderr = sys.stderr
+                        
+                        # Create a custom capture that updates activity logs AND terminal
+                        class DualOutputCapture:
+                            def __init__(self, original_stream):
+                                self.content = []
+                                self.original_stream = original_stream
+                                
+                            def write(self, text):
+                                # Write to original stream (terminal)
+                                if self.original_stream:
+                                    self.original_stream.write(text)
+                                    self.original_stream.flush()
+                                
+                                # Also capture for activity logs
+                                if text and text.strip():
+                                    self.content.append(text)
+                                    # Add to activity logs immediately
+                                    timestamp = datetime.now().strftime('%H:%M:%S')
+                                    if any(keyword in text.lower() for keyword in ['working agent', 'executing', 'starting', 'completed', 'error']):
+                                        safe_add_activity_log(f"[{timestamp}] 🤖 {text.strip()}")
+                                    elif 'gmail search query' in text.lower():
+                                        safe_add_activity_log(f"[{timestamp}] 🔍 {text.strip()}")
+                                    elif 'fetched' in text.lower() and 'emails' in text.lower():
+                                        safe_add_activity_log(f"[{timestamp}] 📬 {text.strip()}")
+                                    else:
+                                        safe_add_activity_log(f"[{timestamp}] ℹ️ {text.strip()}")
+                                
+                            def flush(self):
+                                if self.original_stream:
+                                    self.original_stream.flush()
+                                
+                            def close(self):
+                                pass
+                        
+                        # Use dual output capture for both stdout and stderr
+                        activity_capture = DualOutputCapture(original_stdout)
+                        error_capture = DualOutputCapture(original_stderr)
+                        
+                        try:
+                            # Redirect both stdout and stderr
+                            sys.stdout = activity_capture
+                            sys.stderr = error_capture
+                            
+                            # Add initial processing message
+                            safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🔍 Starting detailed email analysis and processing...")
+                            
+                            # Apply intelligent rate limiting
+                            try:
+                                from src.gmail_crew_ai.utils.rate_limiter import rate_limiter
+                                
+                                # Check rate limit status
+                                stats = rate_limiter.get_usage_stats()
+                                st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Token usage: {stats['current_usage']}/{stats['max_limit']} ({stats['percentage_used']:.1f}%)")
+                                
+                                # Wait if needed
+                                rate_limiter.wait_if_needed(estimated_tokens=8000)  # Conservative estimate
+                                
+                            except ImportError:
+                                # Fallback to simple delay
+                                time.sleep(2)
+                            
+                            # Start crew execution with progress logging
+                            safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🎯 Starting sequential task execution...")
+                            safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Task 1: Email categorization by priority and type")
+                            
+                            try:
+                                # Enable CrewAI verbose mode to capture more output
+                                crew_instance = crew.crew()
+                                crew_instance.verbose = True  # Force verbose output
+                                
+                                # Add pre-execution status
+                                safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🏃 Executing CrewAI workflow...")
+                                safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 👥 Agents: Categorizer → Organizer → Response Generator → Cleaner")
+                                
+                                result = crew_instance.kickoff(inputs={'email_limit': filters['max_emails']})
+                                
+                                # Add completion messages
+                                safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ CrewAI execution completed successfully!")
+                                safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 All tasks completed: categorization → organization → responses → cleanup")
+                            except (RuntimeError, asyncio.CancelledError) as e:
+                                if "Event loop is closed" in str(e) or "cannot schedule new futures" in str(e):
+                                    safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ CrewAI execution interrupted by system shutdown")
+                                    break  # Exit retry loop
+                                else:
+                                    raise  # Re-raise other errors
+                            
+                        finally:
+                            # Restore original stdout/stderr
+                            sys.stdout = original_stdout
+                            sys.stderr = original_stderr
+                            
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    if "rate_limit_error" in str(e) and attempt < max_retries - 1:
+                        # Rate limit error, wait and retry
+                        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Rate limit reached, waiting {retry_delay} seconds before retry...")
+                        
+                        # On second retry, try fallback model
+                        if attempt == 1:
+                            os.environ["RATE_LIMIT_FALLBACK"] = "true"
+                            st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Switching to OpenAI fallback model...")
+                        
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                        st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🔄 Retrying (attempt {attempt + 2}/{max_retries})...")
+                    else:
+                        # Other error or final attempt, re-raise
+                        raise
+                finally:
+                    # Clear fallback flag after attempts
+                    if "RATE_LIMIT_FALLBACK" in os.environ:
+                        del os.environ["RATE_LIMIT_FALLBACK"]
             
             # Clear progress indicator
             progress_placeholder.empty()
@@ -5391,30 +5761,9 @@ def process_emails_with_filters(user_id: str, oauth_manager):
             else:
                 st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Email processing completed successfully!")
                 st.session_state.activity_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🎉 All tasks completed: emails categorized, organized, responses generated, cleanup performed")
-                st.success(" Email processing completed!")
+                if st.session_state.get('debug_mode', False):
+                    st.success(" Email processing completed!")
                 
-                # Track usage after successful processing
-                if st.session_state.subscription_manager and st.session_state.usage_tracker:
-                    try:
-                        authenticated_user_id = st.session_state.authenticated_user_id
-                        subscription = st.session_state.subscription_manager.get_user_subscription(authenticated_user_id)
-                        emails_processed = max_emails  # Number of emails processed
-                        
-                        user_manager = st.session_state.user_manager
-                        st.session_state.usage_tracker.record_usage(
-                            authenticated_user_id, 
-                            subscription.plan_type if subscription else PlanType.FREE,
-                            emails_processed,
-                            user_manager
-                        )
-                        
-                        st.session_state.activity_logs.append(
-                            f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Recorded usage: {emails_processed} emails"
-                        )
-                    except Exception as usage_error:
-                        st.session_state.activity_logs.append(
-                            f"[{datetime.now().strftime('%H:%M:%S')}] ⚠️ Failed to record usage: {str(usage_error)}"
-                        )
                     
             # Log successful completion to crew logger
             crew_log = get_crew_logger()
@@ -5915,12 +6264,13 @@ def main():
         
         if session_restored:
             log.info("Session restored successfully on page load")
-            # Show brief success message before redirect
-            success_placeholder = st.empty()
-            with success_placeholder.container():
-                st.success("✅ Session restored successfully!")
-            time.sleep(0.5)
-            success_placeholder.empty()
+            # Only show success message in debug mode
+            if st.session_state.get('debug_mode', False):
+                success_placeholder = st.empty()
+                with success_placeholder.container():
+                    st.success("✅ Session restored successfully!")
+                time.sleep(0.5)
+                success_placeholder.empty()
             # Force immediate redirect to prevent any login page flash
             st.rerun()
         else:
@@ -6219,9 +6569,10 @@ def main():
                 st.success(st.session_state.oauth_success_message)
                 del st.session_state.oauth_success_message
             else:
-                # Create a success message that disappears after 3 seconds
-                success_placeholder = st.empty()
-                success_placeholder.success(" Authentication successful! Redirecting...")
+                # Only show authentication success in debug mode
+                if st.session_state.get('debug_mode', False):
+                    success_placeholder = st.empty()
+                    success_placeholder.success(" Authentication successful! Redirecting...")
                 
                 # Use JavaScript to hide the message after 3 seconds
                 components.html(
@@ -6314,15 +6665,6 @@ def initialize_app():
     if 'user_manager' not in st.session_state:
         st.session_state.user_manager = UserManager()
     
-    if 'stripe_service' not in st.session_state:
-        stripe_api_key = os.getenv('STRIPE_SECRET_KEY', '')
-        st.session_state.stripe_service = StripeService(stripe_api_key)
-        
-    if 'subscription_manager' not in st.session_state:
-        st.session_state.subscription_manager = SubscriptionManager(st.session_state.stripe_service)
-        
-    if 'usage_tracker' not in st.session_state:
-        st.session_state.usage_tracker = UsageTracker()
         
     if 'session_manager' not in st.session_state:
         st.session_state.session_manager = SessionManager()

@@ -160,7 +160,8 @@ class APIKeyManager:
             return False
         
         # Check for common API key patterns
-        if api_key.startswith(('sk-', 'sk-ant-api', 'pk_')):
+        if api_key.startswith(('sk-', 'sk-ant-api', 'pk_')) or \
+           (len(api_key) >= 20 and '_' in api_key):  # DO AI keys have underscores
             # Basic length checks
             if len(api_key) < 20:  # Too short to be valid
                 return False

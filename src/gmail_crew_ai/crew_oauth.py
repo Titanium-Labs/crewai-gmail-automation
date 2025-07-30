@@ -57,10 +57,8 @@ class OAuth2GmailCrewAi:
         if not self.user_id:
             raise ValueError("User ID must be provided either as parameter or CURRENT_USER_ID environment variable")
             
-        print(f"🔐 Using OAuth2 authentication for user: {self.user_id}")
-        if self.user_api_keys:
-            api_types = list(self.user_api_keys.keys())
-            print(f"🔑 User has personal API keys for: {', '.join(api_types)}")
+        # Silently use OAuth2 authentication
+        pass
         
         if not OAUTH2_AVAILABLE:
             raise ImportError("OAuth2Manager not available. Please check your OAuth2 setup.")
@@ -68,9 +66,9 @@ class OAuth2GmailCrewAi:
         # Setup LLM with user-specific API keys
         try:
             self.llm = self._setup_llm()
-            print(f"✅ CrewAI LLM setup completed for user: {self.user_id}")
+            pass  # LLM setup completed
         except Exception as e:
-            print(f"❌ CrewAI LLM setup failed for user {self.user_id}: {e}")
+            # Log error without printing to UI
             raise
             
         # Initialize OAuth2Manager if not provided
@@ -82,8 +80,9 @@ class OAuth2GmailCrewAi:
         if not OAUTH2_AVAILABLE:
             raise ImportError("OAuth2 Gmail tools not available. Please check your setup.")
             
+        # Do NOT include OAuth2GetUnreadEmailsTool here to prevent agents from fetching emails
+        # Emails are already fetched once in prepare_emails() before crew starts
         return [
-            OAuth2GetUnreadEmailsTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
             OAuth2GmailOrganizeTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
             OAuth2GmailDeleteTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
             OAuth2SaveDraftTool(user_id=self.user_id, oauth_manager=self.oauth_manager),
@@ -93,7 +92,7 @@ class OAuth2GmailCrewAi:
     @before_kickoff
     def prepare_emails(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Fetch emails using OAuth2 authentication."""
-        print("📧 Fetching emails using OAuth2...")
+        # Fetching emails using OAuth2
         
         # Ensure output directory exists
         output_dir = Path("output")
@@ -101,7 +100,7 @@ class OAuth2GmailCrewAi:
         
         # Get email limit from inputs (default to 10 for OAuth2)
         email_limit = inputs.get('email_limit', 10)
-        print(f"Processing up to {email_limit} emails...")
+        # Processing emails
 
         try:
             # Get OAuth2 email tool
@@ -114,15 +113,15 @@ class OAuth2GmailCrewAi:
             raw_emails = tool._run(max_emails=email_limit)
             
             if not raw_emails:
-                print("📭 No unread emails found.")
+                # No unread emails found
                 return inputs
 
             # Process emails into EmailDetails format
             emails = []
             for subject, sender, body, email_id, thread_info in raw_emails:
-                # Limit body content to prevent context overflow when agents process the file
-                # Keep only first 300 characters which should contain the most important content
-                limited_body = body[:300] + "... [Body limited for processing efficiency]" if len(body) > 300 else body
+                # Limit body content to optimize token usage (targeting 500-1000 tokens per email)
+                # Keep only first 200 characters which should contain the most important content
+                limited_body = body[:200] + "... [Body truncated for efficiency]" if len(body) > 200 else body
                 
                 email_detail = EmailDetails(
                     email_id=email_id,
@@ -144,7 +143,7 @@ class OAuth2GmailCrewAi:
                         today = datetime.now()
                         email_detail.age_days = (today - email_date).days
                 except Exception as e:
-                    print(f"Error calculating age for email date {email_detail.date}: {e}")
+                    # Error calculating age for email date
                     email_detail.age_days = None
 
                 emails.append(email_detail.dict())
@@ -153,11 +152,11 @@ class OAuth2GmailCrewAi:
             with open('output/fetched_emails.json', 'w', encoding='utf-8') as f:
                 json.dump(emails, f, indent=2, ensure_ascii=False)
 
-            print(f"📧 Fetched and saved {len(emails)} emails to output/fetched_emails.json")
+            # Fetched and saved emails to output/fetched_emails.json
             return inputs
 
         except Exception as e:
-            print(f"❌ Error fetching emails: {e}")
+            # Error fetching emails
             return inputs
 
     def _setup_llm(self):
@@ -166,77 +165,117 @@ class OAuth2GmailCrewAi:
         load_dotenv(override=True)
         
         # Get model from environment with smart fallback
-        model = os.getenv("MODEL", "anthropic/claude-4-sonnet")
+        model = os.getenv("MODEL", "openai/gpt-4.1")
+        
+        # Check if we're in a rate limit retry scenario
+        if os.getenv("RATE_LIMIT_FALLBACK") == "true":
+            # Switch to OpenAI model as fallback
+            if "claude" in model.lower() or "anthropic" in model.lower():
+                model = "openai/gpt-4-turbo-preview"
+                print(f"Rate limit detected, switching to fallback model: {model}")
         
         # Helper function to get API key with user preference and environment fallback
         def get_api_key_with_fallback(key_type: str) -> str:
             # Try user-specific key first
             if self.user_api_keys and key_type in self.user_api_keys and self.user_api_keys[key_type]:
-                print(f"🔑 Using user's {key_type} API key")
+                pass  # Using user's API key
                 return self.user_api_keys[key_type]
             
             # Fallback to environment key
             env_key = os.getenv(f"{key_type.upper()}_API_KEY")
             if env_key:
-                print(f"🌐 Using default {key_type} API key from environment")
+                pass  # Using default API key from environment
                 return env_key
             
             return None
         
         # Determine which API key to use based on model
-        if "anthropic" in model.lower():
+        if "do-ai" in model.lower():
+            api_key = get_api_key_with_fallback("do_ai")
+            if not api_key:
+                pass  # No DO AI API key, falling back to OpenAI
+                model = "openai/gpt-4.1"
+                api_key = get_api_key_with_fallback("openai")
+        elif "anthropic" in model.lower():
             api_key = get_api_key_with_fallback("anthropic")
             if not api_key:
-                print("⚠️  No Anthropic API key available, falling back to OpenAI")
+                pass  # No Anthropic API key, falling back to OpenAI
                 model = "openai/gpt-4o-mini"
                 api_key = get_api_key_with_fallback("openai")
             else:
                 # Validate Anthropic API key format
                 if not api_key.startswith("sk-ant-"):
-                    print(f"⚠️  Invalid Anthropic API key format (should start with 'sk-ant-'), falling back to OpenAI")
+                    pass  # Invalid Anthropic API key format, falling back
                     model = "openai/gpt-4o-mini"
                     api_key = get_api_key_with_fallback("openai")
         else:
             api_key = get_api_key_with_fallback("openai")
             if not api_key:
-                print("⚠️  No OpenAI API key available, falling back to Claude")
-                model = "anthropic/claude-4-sonnet"
+                pass  # No OpenAI API key, falling back to Claude
+                model = "anthropic/claude-3-5-sonnet-latest"
                 api_key = get_api_key_with_fallback("anthropic")
             else:
                 # Validate OpenAI API key format
                 if not api_key.startswith("sk-"):
-                    print(f"⚠️  Invalid OpenAI API key format (should start with 'sk-'), falling back to Claude")
-                    model = "anthropic/claude-4-sonnet"
+                    pass  # Invalid OpenAI API key format, falling back
+                    model = "anthropic/claude-3-5-sonnet-20241022"
                     api_key = get_api_key_with_fallback("anthropic")
         
         if not api_key:
-            error_msg = "No valid API key found. Please configure API keys in settings or set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file."
-            print(f"❌ {error_msg}")
+            error_msg = "No valid API key found. Please configure API keys in settings or set DO_AI_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file."
+            pass  # Error message
             raise ValueError(error_msg)
         
         # Validate API key format more thoroughly
         is_valid_format = False
-        if "anthropic" in model.lower() and api_key.startswith("sk-ant-"):
+        if "do-ai" in model.lower():
+            # DO AI keys don't have a specific format requirement
+            is_valid_format = True
+        elif "anthropic" in model.lower() and api_key.startswith("sk-ant-"):
             is_valid_format = True
         elif "openai" in model.lower() and api_key.startswith("sk-"):
             is_valid_format = True
             
         if not is_valid_format:
             error_msg = f"Invalid API key format for {model}. Anthropic keys should start with 'sk-ant-', OpenAI keys should start with 'sk-'."
-            print(f"❌ {error_msg}")
+            pass  # Error message
             raise ValueError(error_msg)
         
-        print(f"🤖 Using model: {model}")
-        print(f"🔑 Using API key type: {'Anthropic' if 'anthropic' in model.lower() else 'OpenAI'}")
-        print(f"🔍 API key validation: {'✅ Valid format' if is_valid_format else '❌ Invalid format'}")
+        # Model and API key setup complete
         
         try:
-            llm_instance = LLM(model=model, api_key=api_key)
-            print(f"✅ LLM instance created successfully")
+            # Handle DO AI custom endpoint
+            if "do-ai" in model.lower():
+                # For DO AI, we need to use a custom base URL with openai/ prefix
+                llm_instance = LLM(
+                    model="openai/gpt-4", # Use openai prefix for custom endpoints
+                    api_key=api_key,
+                    base_url="https://qbzliijukm26wurykp3itmoq.agents.do-ai.run",
+                    custom_llm_provider="openai"  # Specify provider for custom endpoint
+                )
+            else:
+                llm_instance = LLM(model=model, api_key=api_key)
+            pass  # LLM instance created
+            
+            # Test the API key by making a simple completion request
+            try:
+                # Testing API key validity
+                test_response = llm_instance.call(messages=[{"role": "user", "content": "test"}])
+                pass  # API key validated
+            except Exception as api_error:
+                error_str = str(api_error)
+                if "authentication" in error_str.lower() or "invalid x-api-key" in error_str.lower():
+                    error_msg = f"API key authentication failed. The {('Anthropic' if 'anthropic' in model.lower() else 'OpenAI')} API key is invalid or expired. Please update your API key."
+                    pass  # Error message
+                    raise ValueError(error_msg)
+                else:
+                    # Re-raise other errors
+                    raise
+            
             return llm_instance
         except Exception as e:
             error_msg = f"Failed to create LLM instance: {e}"
-            print(f"❌ {error_msg}")
+            pass  # Error message
             raise ValueError(error_msg)
 
     @agent
@@ -270,13 +309,15 @@ class OAuth2GmailCrewAi:
     def response_generator(self) -> Agent:
         """The email response generator agent."""
         gmail_tools = self._get_gmail_tools()
+        # Add search tool specifically for context research before replies
+        search_tool = OAuth2GetUnreadEmailsTool(user_id=self.user_id, oauth_manager=self.oauth_manager)
         config = self.agents_config['response_generator']
         return Agent(
             role=config['role'],
             goal=config['goal'], 
             backstory=config['backstory'],
             memory=config.get('memory', True),
-            tools=[*gmail_tools, FileReadTool()],
+            tools=[*gmail_tools, search_tool, FileReadTool()],
             llm=self.llm
         )
 
@@ -347,7 +388,7 @@ class OAuth2GmailCrewAi:
                 self.cleanup_task()
             ],
             process=Process.sequential,
-            verbose=True
+            verbose=False
         )
 
     def get_user_email(self) -> str:
@@ -358,7 +399,7 @@ class OAuth2GmailCrewAi:
         try:
             return self.oauth_manager.get_user_email()
         except Exception as e:
-            print(f"⚠️ Error getting user email: {e}")
+            # Error getting user email
             return "unknown@user.com"
 
 

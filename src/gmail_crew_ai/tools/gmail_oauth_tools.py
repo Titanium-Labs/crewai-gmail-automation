@@ -202,9 +202,13 @@ class OAuth2GmailToolBase(BaseTool):
 class OAuth2GetUnreadEmailsToolSchema(BaseModel):
     """Schema for OAuth2GetUnreadEmailsTool input."""
     max_emails: int = Field(
-        default=50,
+        default=3,
         description="Maximum number of unread emails to retrieve",
         ge=1, le=100
+    )
+    search_query: Optional[str] = Field(
+        default=None,
+        description="Custom Gmail search query (e.g., 'from:sender@example.com subject:topic')"
     )
 
 class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
@@ -214,11 +218,14 @@ class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
     description: str = "Fetch emails from Gmail using OAuth2 authentication with flexible search queries"
     args_schema: type[BaseModel] = OAuth2GetUnreadEmailsToolSchema
 
-    def _run(self, max_emails: int = 50) -> List[Tuple[str, str, str, str, Dict]]:
+    def _run(self, max_emails: int = 3, search_query: Optional[str] = None) -> List[Tuple[str, str, str, str, Dict]]:
         """Fetch emails using Gmail API with user-specified search query in chronological descending order."""
-        # Get search query from environment, fallback to 'is:unread'
-        search_query = os.environ.get('GMAIL_SEARCH_QUERY', 'is:unread')
-        print(f"Using Gmail search query: {search_query}")
+        # Use provided search query, fallback to environment, then to 'is:unread'
+        if search_query:
+            final_query = search_query
+        else:
+            final_query = os.environ.get('GMAIL_SEARCH_QUERY', 'is:unread')
+        print(f"Using Gmail search query: {final_query}")
         
         try:
             service = self._get_gmail_service()
@@ -226,7 +233,7 @@ class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
             # Get messages based on user's filter selection
             results = service.users().messages().list(
                 userId='me',
-                q=search_query,
+                q=final_query,
                 maxResults=max_emails
             ).execute()
             
@@ -273,11 +280,11 @@ class OAuth2GetUnreadEmailsTool(OAuth2GmailToolBase):
             # Extract just the email data (without the timestamp)
             emails = [email_data for email_data, _ in emails_with_dates]
             
-            print(f"Fetched and sorted {len(emails)} emails in chronological descending order using OAuth2 with query: {search_query}")
+            print(f"Fetched and sorted {len(emails)} emails in chronological descending order using OAuth2 with query: {final_query}")
             return emails
             
         except Exception as e:
-            print(f"Error fetching emails with OAuth2 using query '{search_query}': {e}")
+            print(f"Error fetching emails with OAuth2 using query '{final_query}': {e}")
             return []
 
 
@@ -434,6 +441,8 @@ class OAuth2SaveDraftToolSchema(BaseModel):
     subject: str = Field(description="Subject line of the email")
     body: str = Field(description="Body content of the email")
     in_reply_to: Optional[str] = Field(default=None, description="Message ID this is a reply to")
+    thread_id: Optional[str] = Field(default=None, description="Thread ID to add the reply to")
+    references: Optional[str] = Field(default=None, description="References header for email threading")
 
 class OAuth2SaveDraftTool(OAuth2GmailToolBase):
     """OAuth2 version of the Gmail draft saver tool."""
@@ -450,8 +459,11 @@ class OAuth2SaveDraftTool(OAuth2GmailToolBase):
             description="Save email drafts in Gmail using OAuth2 authentication"
         )
 
-    def _run(self, recipient: str, subject: str, body: str, in_reply_to: Optional[str] = None) -> str:
-        """Save email draft using Gmail API."""
+    def _run(self, recipient: str, subject: str, body: str, 
+             in_reply_to: Optional[str] = None, 
+             thread_id: Optional[str] = None,
+             references: Optional[str] = None) -> str:
+        """Save email draft using Gmail API with proper threading support."""
         try:
             service = self._get_gmail_service()
             
@@ -460,28 +472,37 @@ class OAuth2SaveDraftTool(OAuth2GmailToolBase):
             message['To'] = recipient
             message['Subject'] = subject
             
+            # Add threading headers for proper reply threading
             if in_reply_to:
                 message['In-Reply-To'] = in_reply_to
-                message['References'] = in_reply_to
+                # References should include both the original message ID and any previous references
+                if references:
+                    message['References'] = f"{references} {in_reply_to}"
+                else:
+                    message['References'] = in_reply_to
             
             message.attach(MIMEText(body, 'plain'))
             
             # Encode message
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
             
-            # Create draft
+            # Create draft body
             draft_body = {
                 'message': {
                     'raw': raw_message
                 }
             }
             
+            # Add threadId if provided to ensure the draft is in the same thread
+            if thread_id:
+                draft_body['message']['threadId'] = thread_id
+            
             draft = service.users().drafts().create(
                 userId='me',
                 body=draft_body
             ).execute()
             
-            return f"Successfully saved draft (ID: {draft['id']}) to {recipient}"
+            return f"Successfully saved draft (ID: {draft['id']}) to {recipient} in thread {thread_id or 'new'}"
             
         except Exception as e:
             return f"Error saving draft to {recipient}: {str(e)}"

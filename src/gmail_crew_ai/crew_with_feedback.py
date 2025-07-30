@@ -36,7 +36,7 @@ class GmailCrewAiWithFeedback():
         print("=" * 60)
 
     # Get model from environment with smart fallback
-    model = os.getenv("MODEL", "anthropic/claude-4-sonnet")
+    model = os.getenv("MODEL", "anthropic/claude-3-5-sonnet-20241022")
     
     # Determine which API key to use based on model
     if "anthropic" in model.lower():
@@ -49,7 +49,7 @@ class GmailCrewAiWithFeedback():
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             print("⚠️  OPENAI_API_KEY not found, falling back to Claude")
-            model = "anthropic/claude-4-sonnet"
+            model = "anthropic/claude-3-5-sonnet-20241022"
             api_key = os.getenv("ANTHROPIC_API_KEY")
     
     if not api_key:

@@ -132,3 +132,10 @@ The project includes fixes for PSReadLine compatibility issues with Warp termina
 2. Verify Google Cloud Console settings
 3. Ensure correct scopes in OAuth consent screen
 4. Check token expiration in `tokens/` directory
+
+### Logging Configuration
+The project includes logging fixes to reduce verbose output:
+- `configure_logging.py`: Suppresses verbose third-party library logging
+- `.streamlit/config.toml`: Optimized for threading and reduced warnings
+- Streamlit ScriptRunContext warnings automatically filtered during CrewAI execution
+- Test logging fixes with: `python3 test_logging_fixes.py`

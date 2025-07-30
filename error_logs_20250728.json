@@ -1,0 +1,92 @@
+[
+  {
+    "id": "822462ef-be29-49aa-aed8-944153738a1d",
+    "timestamp": "2025-07-28T17:32:24.334910",
+    "type": "Unknown Error",
+    "message": "Email processing failed: Event loop is closed",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 3, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Analysis: Unknown Error",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "2c564044-1b59-48dc-88fb-7c678b7690b9",
+    "timestamp": "2025-07-28T17:32:24.326613",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: cannot schedule new futures after shutdown",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 3, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: . Analysis: Unknown Error",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "f9178d04-447a-4934-b3fc-a61d1d1c233f",
+    "timestamp": "2025-07-28T15:27:01.247908",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.RateLimitError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed the rate limit for your organization (41cba545-e170-40d6-a5c7-7c0cab4163d1) of 30,000 input tokens per minute. For details, refer to: https://docs.anthropic.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://www.anthropic.com/contact-sales to discuss your options for a rate limit increase.\"}}",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: . Analysis: Gmail Authentication",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "7bf91b1d-7f13-4d38-857c-efcb51fc7d98",
+    "timestamp": "2025-07-28T15:02:39.317054",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.RateLimitError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed the rate limit for your organization (41cba545-e170-40d6-a5c7-7c0cab4163d1) of 30,000 input tokens per minute. For details, refer to: https://docs.anthropic.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://www.anthropic.com/contact-sales to discuss your options for a rate limit increase.\"}}",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: . Analysis: Gmail Authentication",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "30cf8e85-c72e-4e2b-a8c9-256968323e02",
+    "timestamp": "2025-07-28T14:54:59.790086",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.RateLimitError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed the rate limit for your organization (41cba545-e170-40d6-a5c7-7c0cab4163d1) of 30,000 input tokens per minute. For details, refer to: https://docs.anthropic.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://www.anthropic.com/contact-sales to discuss your options for a rate limit increase.\"}}",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: . Analysis: Gmail Authentication",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "3922489c-a834-4d51-ac7b-3c0c3d4d4c7d",
+    "timestamp": "2025-07-28T11:18:49.721824",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.RateLimitError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed the rate limit for your organization (41cba545-e170-40d6-a5c7-7c0cab4163d1) of 40,000 input tokens per minute. For details, refer to: https://docs.anthropic.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://www.anthropic.com/contact-sales to discuss your options for a rate limit increase.\"}}",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: . Analysis: Gmail Authentication",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "056ac4e7-5643-420e-ae06-0368fb118488",
+    "timestamp": "2025-07-28T11:10:34.961688",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.RateLimitError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed the rate limit for your organization (41cba545-e170-40d6-a5c7-7c0cab4163d1) of 40,000 input tokens per minute. For details, refer to: https://docs.anthropic.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://www.anthropic.com/contact-sales to discuss your options for a rate limit increase.\"}}",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: . Analysis: Gmail Authentication",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "302aa154-b8e1-4f44-b82e-fcc45e07ef68",
+    "timestamp": "2025-07-28T10:55:29.485750",
+    "type": "AI Model Issue",
+    "message": "Email processing failed: Failed to create LLM instance: litellm.NotFoundError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: claude-4-sonnet\"}}",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Analysis: AI Model Issue",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "6a23a09a-aba1-4982-8058-dfd489aae7d4",
+    "timestamp": "2025-07-28T10:48:54.447254",
+    "type": "Gmail Authentication",
+    "message": "Email processing failed: Failed to create LLM instance: LLM.call() got an unexpected keyword argument 'max_tokens'",
+    "details": "Error during email processing for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:unread\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": true, \"starred_only\": false, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Analysis: Gmail Authentication",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  },
+  {
+    "id": "a4e054d2-d158-46d9-89c3-2e2bc1e9abbc",
+    "timestamp": "2025-07-28T10:32:57.302387",
+    "type": "CrewAI",
+    "message": "CrewAI execution failed: litellm.AuthenticationError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"}}",
+    "details": "Error during crew execution for user articulatedesigns@gmail.com. Filters: {\"max_emails\": 10, \"gmail_search\": \"is:starred\", \"from_sender\": \"\", \"to_recipient\": \"\", \"subject_filter\": \"\", \"keyword\": \"\", \"unread_only\": false, \"starred_only\": true, \"important_only\": false, \"has_attachment\": false, \"labels\": [], \"categories\": [], \"date_filters\": [], \"size_filters\": [], \"filename_filters\": [], \"exclude_terms\": []}. Rules: . Analysis: Anthropic API Key Issue",
+    "user_id": "user_zhQ7K854ngI",
+    "resolved": false
+  }
+]

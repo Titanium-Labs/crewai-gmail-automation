@@ -20,7 +20,9 @@
       "Bash(python:*)",
       "Bash(awk:*)",
       "Bash(cp:*)",
-      "Bash(timeout 10 streamlit run streamlit_app.py)"
+      "Bash(timeout 10 streamlit run streamlit_app.py)",
+      "Bash(test:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   }

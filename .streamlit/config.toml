@@ -1,0 +1,28 @@
+[server]
+# Disable file watching for better performance and to avoid cache file errors
+fileWatcherType = "none"
+# Disable CORS for better threading compatibility
+enableCORS = false
+# Disable WebSocket compression to reduce threading issues
+enableWebsocketCompression = false
+
+# Alternative: If you want to keep file watching but exclude certain patterns
+# fileWatcherType = "auto"
+# folderWatchBlacklist = ["**/.*", "**/__pycache__", "**/*.pyc", "**/node_modules", "**/venv", "**/.venv"]
+
+[runner]
+# Disable showing errors in the browser for a cleaner experience
+showErrorDetails = false
+# Reduce threading warnings
+fastReruns = true
+
+[browser]
+# Gather usage stats to help improve Streamlit
+gatherUsageStats = false
+
+[theme]
+# Optional: Set a default theme
+# primaryColor = "#FF6B6B"
+# backgroundColor = "#FFFFFF"
+# secondaryBackgroundColor = "#F0F2F6"
+# textColor = "#262730"

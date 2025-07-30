@@ -25,40 +25,50 @@ class GmailCrewAi():
 
 	def __init__(self):
 		"""Initialize the crew and display available tools."""
-		print("\n🚀 INITIALIZING GMAIL CREW AI")
-		print("=" * 50)
-		print("📧 Gmail automation with basic tools")
-		print("⚠️  Note: Advanced tools disabled due to embedchain dependency conflicts")
-		print("=" * 50)
-
-	# Get model from environment with smart fallback
-	model = os.getenv("MODEL", "anthropic/claude-4-sonnet")
-	
-	# Determine which API key to use based on model
-	if "anthropic" in model.lower():
-		api_key = os.getenv("ANTHROPIC_API_KEY")
-		if not api_key:
-			print("⚠️  ANTHROPIC_API_KEY not found, falling back to OpenAI")
-			model = "openai/gpt-4o-mini"
-			api_key = os.getenv("OPENAI_API_KEY")
-	else:
-		api_key = os.getenv("OPENAI_API_KEY")
-		if not api_key:
-			print("⚠️  OPENAI_API_KEY not found, falling back to Claude")
-			model = "anthropic/claude-4-sonnet"
+		# Initialize Gmail Crew AI with basic tools
+		
+		# Get model from environment with smart fallback
+		model = os.getenv("MODEL", "openai/gpt-4.1")
+		
+		# Determine which API key to use based on model
+		if "do-ai" in model.lower():
+			api_key = os.getenv("DO_AI_API_KEY")
+			if not api_key:
+				pass  # Falling back to OpenAI
+				model = "openai/gpt-4.1"
+				api_key = os.getenv("OPENAI_API_KEY")
+		elif "anthropic" in model.lower():
 			api_key = os.getenv("ANTHROPIC_API_KEY")
-	
-	if not api_key:
-		raise ValueError("No valid API key found. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file.")
-	
-	print(f"🤖 Using model: {model}")
-	print(f"🔑 Using API key type: {'Anthropic' if 'anthropic' in model.lower() else 'OpenAI'}")
-	llm = LLM(model=model, api_key=api_key)
+			if not api_key:
+				pass  # Falling back to OpenAI
+				model = "openai/gpt-4o-mini"
+				api_key = os.getenv("OPENAI_API_KEY")
+		else:
+			api_key = os.getenv("OPENAI_API_KEY")
+			if not api_key:
+				pass  # Falling back to Claude
+				model = "anthropic/claude-3-5-sonnet-latest"
+				api_key = os.getenv("ANTHROPIC_API_KEY")
+		
+		if not api_key:
+			raise ValueError("No valid API key found. Please set DO_AI_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file.")
+		
+		# Model and API key configured
+		if "do-ai" in model.lower():
+			# Handle DO AI custom endpoint with openai prefix
+			self.llm = LLM(
+				model="openai/gpt-4", # Use openai prefix for custom endpoints
+				api_key=api_key,
+				base_url="https://qbzliijukm26wurykp3itmoq.agents.do-ai.run",
+				custom_llm_provider="openai"  # Specify provider for custom endpoint
+			)
+		else:
+			self.llm = LLM(model=model, api_key=api_key)
 
 	@before_kickoff
 	def fetch_emails(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
 		"""Fetch emails before starting the crew and calculate ages."""
-		print("Fetching emails and calculating ages...")
+		# Fetching emails and calculating ages
 		
 		try:
 			# For OAuth2, try to get emails without credentials first
@@ -79,7 +89,7 @@ class GmailCrewAi():
 						age_days = (datetime.now().replace(tzinfo=email_date.tzinfo) - email_date).days
 						email['age_days'] = age_days
 					except Exception as e:
-						print(f"Error calculating age for email: {e}")
+						pass  # Error calculating age
 						email['age_days'] = 0
 			
 			# Save to file for agents to read
@@ -87,12 +97,11 @@ class GmailCrewAi():
 			with open('output/fetched_emails.json', 'w') as f:
 				json.dump(emails, f, indent=2)
 			
-			print(f"✅ Fetched {len(emails)} emails with age calculations")
+			# Fetched emails with age calculations
 			return inputs
 			
 		except Exception as e:
-			print(f"❌ Error fetching emails: {e}")
-			print("Creating empty email file for demo mode")
+			# Error fetching emails - creating empty file for demo mode
 			# Create empty file so agents don't fail
 			os.makedirs('output', exist_ok=True)
 			with open('output/fetched_emails.json', 'w') as f:
