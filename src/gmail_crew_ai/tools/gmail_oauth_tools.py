@@ -84,7 +84,11 @@ class OAuth2GmailToolBase(BaseTool):
     user_id: Optional[str] = Field(None, description="User ID for OAuth2 authentication")
     oauth_manager: Optional[Any] = Field(None, description="OAuth2 manager instance")
 
-    def __init__(self, user_id: Optional[str] = None, oauth_manager: Any = None, description: str = "", name: str = "OAuth2GmailTool"):
+    def __init__(self, user_id: Optional[str] = None, oauth_manager: Any = None, description: str = "", name: str = None):
+        # Use the class's name attribute if no name is provided
+        if name is None:
+            name = getattr(self, 'name', 'OAuth2GmailToolBase')
+        
         super().__init__(name=name, description=description)
         
         # Get user ID from environment if not provided
@@ -310,6 +314,10 @@ class OAuth2GmailOrganizeTool(OAuth2GmailToolBase):
              mark_unread: bool = False) -> str:
         """Organize email using Gmail API."""
         try:
+            # Validate required parameters
+            if not email_id or email_id.strip() == "":
+                return "Error: email_id is required and cannot be empty. Please provide a valid email ID."
+            
             service = self._get_gmail_service()
             
             # Prepare modification request
@@ -1165,3 +1173,13 @@ Recent Work/Professional Activity:
         
         top_activities = sorted(work_activity.items(), key=lambda x: x[1], reverse=True)[:5]
         return '\n'.join([f"- {activity.title()}: {count} mentions" for activity, count in top_activities]) 
+
+
+class OAuth2GmailTool(OAuth2GmailOrganizeTool):
+    """Alias for OAuth2GmailOrganizeTool to maintain backward compatibility."""
+    
+    name: str = "OAuth2GmailTool"
+    description: str = "Organize emails in Gmail using OAuth2 authentication (alias for OAuth2GmailOrganizeTool)"
+    
+    def __init__(self, user_id: Optional[str] = None, oauth_manager: Any = None):
+        super().__init__(user_id=user_id, oauth_manager=oauth_manager) 

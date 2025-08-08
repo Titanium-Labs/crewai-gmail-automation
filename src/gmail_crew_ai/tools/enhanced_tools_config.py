@@ -49,11 +49,11 @@ class BasicToolsConfig:
         # Add file tools (instantiate them)
         tools.extend([FileReadTool(), JsonFileReadTool(), JsonFileSaveTool()])
         
-        # Add draft saving tool - using OAuth2 version directly  
-        from .gmail_oauth_tools import OAuth2SaveDraftTool
-        tools.append(OAuth2SaveDraftTool())
+        # Add Gmail tools - using OAuth2 versions directly  
+        from .gmail_oauth_tools import OAuth2SaveDraftTool, OAuth2GetUnreadEmailsTool
+        tools.extend([OAuth2SaveDraftTool(), OAuth2GetUnreadEmailsTool()])
         
-        print("🔧 Response Generator tools: Email drafting + File operations")
+        print("🔧 Response Generator tools: Email drafting + Email search + File operations")
         return tools
     
     @staticmethod
@@ -65,13 +65,13 @@ class BasicToolsConfig:
         tools.extend([FileReadTool(), JsonFileReadTool(), JsonFileSaveTool()])
         
         # Add Gmail tool instances - using OAuth2 versions directly
-        from .gmail_oauth_tools import OAuth2GmailDeleteTool, OAuth2EmptyTrashTool
-        tools.extend([OAuth2GmailDeleteTool(), OAuth2EmptyTrashTool()])
+        from .gmail_oauth_tools import OAuth2GmailDeleteTool, OAuth2EmptyTrashTool, OAuth2GmailOrganizeTool, OAuth2GmailTool
+        tools.extend([OAuth2GmailDeleteTool(), OAuth2EmptyTrashTool(), OAuth2GmailOrganizeTool(), OAuth2GmailTool()])
         
         # Add date calculation tool instance
         tools.append(DateCalculationTool())
         
-        print("🔧 Cleaner tools: Gmail cleanup + Date calculations + File operations")
+        print("🔧 Cleaner tools: Gmail cleanup + Organization + Date calculations + File operations")
         return tools
     
     @staticmethod

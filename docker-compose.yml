@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   gmail-crewai:
@@ -7,44 +7,44 @@ services:
       dockerfile: Dockerfile
     container_name: gmail-crewai-automation
     restart: unless-stopped
-    
+
     # Port mapping
     ports:
       - "8501:8501"
-    
+
     # Environment variables
     environment:
       # Required: OpenAI API Key
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      
+
       # OAuth2 Configuration (optional - can be set manually)
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
       - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI:-http://localhost:8501}
-      
+
       # Streamlit Configuration
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
       - STREAMLIT_THEME_BASE=dark
-      
+
       # Application Configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - EMAIL_ADDRESS=${EMAIL_ADDRESS:-}
       - APP_PASSWORD=${APP_PASSWORD:-}
-      
+
       # Stripe Configuration (optional)
       - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
-      
+
       # SMTP Configuration (optional)
       - SMTP_USERNAME=${SMTP_USERNAME:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_SERVER=${SMTP_SERVER:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
-    
+
     # Volume mounts for data persistence
     volumes:
       # Persistent data
@@ -52,13 +52,13 @@ services:
       - gmail_logs:/app/data/logs
       - gmail_output:/app/data/output
       - gmail_knowledge:/app/data/knowledge
-      
+
       # Optional: Mount local credentials.json if you prefer file-based OAuth setup
       # - ./credentials.json:/app/data/credentials.json:ro
-      
+
       # Optional: Mount custom configuration files
       # - ./config:/app/config:ro
-    
+
     # Health check
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
@@ -66,28 +66,28 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    
+
     # Resource limits
     deploy:
       resources:
         limits:
           memory: 2G
-          cpus: '1.0'
+          cpus: "1.0"
         reservations:
           memory: 512M
-          cpus: '0.5'
-    
+          cpus: "0.5"
+
     # Logging configuration
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
-    
+
     # Security options
     security_opt:
       - no-new-privileges:true
-    
+
     # Network configuration
     networks:
       - gmail-crewai-network
@@ -106,4 +106,4 @@ volumes:
 # Custom network
 networks:
   gmail-crewai-network:
-    driver: bridge 
+    driver: bridge
