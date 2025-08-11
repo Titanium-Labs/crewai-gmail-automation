@@ -18,7 +18,7 @@ Thank you for your interest in contributing to the Gmail CrewAI Automation proje
 2. Clone your fork: `git clone https://github.com/yourusername/crewai-gmail-automation.git`
 3. Install dependencies: `pip install -r requirements.txt`
 4. Set up your environment variables (see README.md)
-5. Run the application: `streamlit run streamlit_app.py`
+5. Run the application: `streamlit run streamlit_app.py --server.port ${PORT:-8505}`
 
 ## Development Setup
 

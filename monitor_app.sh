@@ -29,8 +29,9 @@ monitor_errors() {
 }
 
 # Start the app and monitor
-echo "Starting Streamlit app on port 8505..."
-streamlit run streamlit_app.py --server.port 8505 2>&1 | tee "$LOG_FILE" &
+PORT=${PORT:-8505}
+echo "Starting Streamlit app on port $PORT..."
+streamlit run streamlit_app.py --server.port $PORT 2>&1 | tee "$LOG_FILE" &
 APP_PID=$!
 
 # Give it a moment to start

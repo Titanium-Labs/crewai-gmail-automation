@@ -83,7 +83,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 ### Streamlit Web UI (Recommended)
 
 ```bash
-streamlit run streamlit_app.py
+streamlit run streamlit_app.py --server.port ${PORT:-8505}
 ```
 
 This will open a web interface where you can:
@@ -108,7 +108,7 @@ python -m src.gmail_crew_ai.main
 
 ### First Time Setup
 
-1. Launch the Streamlit app: `streamlit run streamlit_app.py`
+1. Launch the Streamlit app: `streamlit run streamlit_app.py --server.port ${PORT:-8505}`
 2. Follow the on-screen setup instructions
 3. Upload your `credentials.json` file if not already present
 4. Click **"Add New User"**

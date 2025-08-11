@@ -77,7 +77,11 @@ This application uses OAuth2 for secure Gmail authentication. Follow the [OAuth2
 ### Streamlit Web Interface (Recommended)
 
 ```bash
-streamlit run streamlit_app.py
+# Default port is 8505 (configurable via PORT env variable)
+streamlit run streamlit_app.py --server.port ${PORT:-8505}
+
+# Or use the start script which handles port configuration automatically
+./start.sh
 ```
 
 This will open a web interface where you can:

@@ -9,8 +9,10 @@ import json
 import traceback
 
 class AppTester:
-    def __init__(self, base_url="http://localhost:8501"):
-        self.base_url = base_url
+    def __init__(self, base_url=None):
+        import os
+        port = os.getenv('PORT', '8505')
+        self.base_url = base_url or f"http://localhost:{port}"
         self.errors = []
         self.warnings = []
         self.info = []

@@ -1,4 +1,6 @@
 [server]
+# Port configuration - uses PORT env var, defaults to 8505
+port = 8505
 # Disable file watching for better performance and to avoid cache file errors
 fileWatcherType = "none"
 # Disable CORS for better threading compatibility

@@ -11,7 +11,16 @@ categorization_task:
     Categories: PERSONAL, NEWSLETTER, PROMOTION, RECEIPT, IMPORTANT, YOUTUBE, OTHER
     Priority: HIGH, MEDIUM, LOW
 
-    Rules: YOUTUBE=READ_ONLY, Old promotions=LOW
+    Priority Override Rules:
+    - If thread_info.is_starred = true → Increase priority by one level (LOW→MEDIUM, MEDIUM→HIGH)
+    - If thread_info.is_important = true → Set to at least MEDIUM priority
+    - If thread_info.is_unread = true AND category is PERSONAL → Set to at least MEDIUM priority
+    - If thread_info.has_attachment = true AND appears business-related → Set to at least MEDIUM priority
+    
+    Special Rules: 
+    - YOUTUBE=READ_ONLY
+    - Old promotions=LOW
+    - Starred emails should be treated as needing attention
 
     Return JSON with emails array (email_id, subject, sender, category, priority, reasoning) and summary.
   expected_output: >
@@ -31,10 +40,13 @@ organization_task:
     - Labels are additive - they organize emails while keeping them accessible
 
     **Stars Assignment:**
-    - **HIGH** priority: Yellow star (⭐)
-    - **MEDIUM** priority: Orange star 
-    - **LOW** priority: No star
-    - **EMAILS NEEDING RESPONSES**: Always star regardless of priority (these include PERSONAL emails with HIGH or MEDIUM priority that will get draft replies)
+    - **HIGH** priority: Always star
+    - **MEDIUM** priority: Star if category is PERSONAL or IMPORTANT
+    - **LOW** priority: No star unless already starred or marked important
+    - **ALREADY STARRED**: Keep the star (check thread_info.is_starred)
+    - **GMAIL IMPORTANT**: Always star (check thread_info.is_important)
+    - **HAS ATTACHMENT**: Star if appears to need action (check thread_info.has_attachment)
+    - **EMAILS NEEDING RESPONSES**: Always star (PERSONAL with HIGH/MEDIUM priority, IMPORTANT with HIGH/MEDIUM priority)
     - **IMPORTANT** category emails: Always star regardless of priority
 
     **Labels to Apply:**
@@ -94,9 +106,20 @@ response_task:
 
     IMPORTANT: Process ALL emails from the categorization report. For each email:
 
-    Only generate responses for:
+    Check the thread_info fields to identify email attributes:
+    - thread_info.is_starred = if email is starred
+    - thread_info.is_important = if email is marked important by Gmail
+    - thread_info.is_unread = if email is unread
+    - thread_info.has_attachment = if email has attachments
+    
+    Generate responses for emails meeting ANY of these criteria:
+    - STARRED emails (thread_info.is_starred = true, any category except YOUTUBE)
+    - IMPORTANT emails marked by Gmail (thread_info.is_important = true, any category except YOUTUBE)
+    - UNREAD emails that are PERSONAL with HIGH or MEDIUM priority
     - PERSONAL emails with HIGH or MEDIUM priority
-    - IMPORTANT emails with HIGH priority (business/work emails requiring urgent response)
+    - IMPORTANT category emails with HIGH or MEDIUM priority (business/work emails)
+    - Any email with has_attachment=true that appears to need acknowledgment or response
+    - Any email marked as HIGH priority that appears to need a response
     - DO NOT generate responses for ANY YouTube emails - the user will respond directly on YouTube instead
 
 

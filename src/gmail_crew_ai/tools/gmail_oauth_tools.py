@@ -160,7 +160,21 @@ class OAuth2GmailToolBase(BaseTool):
         # Extract body
         body = self._extract_body_from_payload(message_data['payload'])
         
-        # Create thread info
+        # Extract all email attributes from labels
+        label_ids = message_data.get('labelIds', [])
+        is_starred = 'STARRED' in label_ids
+        is_important = 'IMPORTANT' in label_ids
+        is_unread = 'UNREAD' in label_ids
+        is_inbox = 'INBOX' in label_ids
+        is_sent = 'SENT' in label_ids
+        is_draft = 'DRAFT' in label_ids
+        is_spam = 'SPAM' in label_ids
+        is_trash = 'TRASH' in label_ids
+        
+        # Check for attachments in the payload
+        has_attachment = self._check_for_attachments(message_data['payload'])
+        
+        # Create thread info with all attributes
         thread_info = {
             'message_id': message_id,
             'date': date_header,
@@ -169,10 +183,36 @@ class OAuth2GmailToolBase(BaseTool):
             'thread_id': message_data.get('threadId', ''),
             'in_reply_to': next((h['value'] for h in headers if h['name'].lower() == 'in-reply-to'), ''),
             'references': next((h['value'] for h in headers if h['name'].lower() == 'references'), ''),
+            'is_starred': is_starred,
+            'is_important': is_important,
+            'is_unread': is_unread,
+            'is_inbox': is_inbox,
+            'is_sent': is_sent,
+            'is_draft': is_draft,
+            'is_spam': is_spam,
+            'is_trash': is_trash,
+            'has_attachment': has_attachment,
+            'labels': label_ids,
+            'custom_labels': [label for label in label_ids if label not in 
+                            ['STARRED', 'IMPORTANT', 'UNREAD', 'INBOX', 'SENT', 'DRAFT', 'SPAM', 'TRASH', 'CATEGORY_PERSONAL', 
+                             'CATEGORY_SOCIAL', 'CATEGORY_PROMOTIONS', 'CATEGORY_UPDATES', 'CATEGORY_FORUMS']]
         }
         
         return subject, sender, body, message_data['id'], thread_info
 
+    def _check_for_attachments(self, payload: Dict) -> bool:
+        """Check if the email has attachments."""
+        if 'parts' in payload:
+            for part in payload['parts']:
+                # Check for attachment disposition or filename
+                if part.get('filename') or part.get('body', {}).get('attachmentId'):
+                    return True
+                # Recursively check nested parts
+                if 'parts' in part:
+                    if self._check_for_attachments(part):
+                        return True
+        return False
+    
     def _extract_body_from_payload(self, payload: Dict) -> str:
         """Extract email body from Gmail API payload."""
         body = ""

@@ -14,11 +14,14 @@ def main():
     # Disable Python bytecode generation to prevent __pycache__ issues
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     
+    # Get port from environment or use default
+    port = os.getenv('PORT', '8505')
+    
     # Run Streamlit with the app
     cmd = [
         sys.executable, '-m', 'streamlit', 'run',
         'streamlit_app.py',
-        '--server.port', '8505',
+        '--server.port', port,
         '--server.fileWatcherType', 'none',
         '--server.headless', 'true',
         '--browser.gatherUsageStats', 'false'
@@ -26,7 +29,7 @@ def main():
     
     print("🚀 Starting Gmail CrewAI App...")
     print("📝 File watching disabled to prevent cache errors")
-    print("🌐 App will be available at http://localhost:8505")
+    print(f"🌐 App will be available at http://localhost:{port}")
     print("🛑 Press Ctrl+C to stop\n")
     
     try:
