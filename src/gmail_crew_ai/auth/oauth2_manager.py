@@ -48,10 +48,13 @@ class OAuth2Manager:
                 "Please download it from Google Cloud Console and save as 'credentials.json'"
             )
         
+        # Use environment variable for redirect URI, fallback to default
+        redirect_uri = os.getenv('OAUTH_REDIRECT_URI', 'http://localhost:8505')
+        
         flow = Flow.from_client_secrets_file(
             self.credentials_file,
             scopes=self.SCOPES,
-            redirect_uri='http://localhost:8505'  # Streamlit port
+            redirect_uri=redirect_uri
         )
         
         # Store flow in session state for later use
@@ -77,10 +80,13 @@ class OAuth2Manager:
                 print(f"⚠️ No cached OAuth flow found for {user_id}, recreating...")
                 # Try to recreate the flow
                 try:
+                    # Use environment variable for redirect URI, fallback to default
+                    redirect_uri = os.getenv('OAUTH_REDIRECT_URI', 'http://localhost:8505')
+                    
                     flow = Flow.from_client_secrets_file(
                         self.credentials_file,
                         scopes=self.SCOPES,
-                        redirect_uri='http://localhost:8505'
+                        redirect_uri=redirect_uri
                     )
                     print("✅ OAuth flow recreated successfully")
                 except Exception as recreate_error:
