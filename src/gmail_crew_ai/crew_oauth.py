@@ -229,8 +229,13 @@ class OAuth2GmailCrewAi:
         # Validate API key format more thoroughly
         is_valid_format = False
         if "do-ai" in model.lower():
-            # DO AI keys don't have a specific format requirement
-            is_valid_format = True
+            # DO AI model is deprecated, switch to OpenAI
+            print(f"DO AI model '{model}' is no longer supported, switching to OpenAI")
+            model = "openai/gpt-4.1"
+            api_key = get_api_key_with_fallback("openai")
+            if not api_key:
+                raise ValueError("No OpenAI API key found for fallback")
+            is_valid_format = api_key.startswith("sk-")
         elif "anthropic" in model.lower() and api_key.startswith("sk-ant-"):
             is_valid_format = True
         elif "openai" in model.lower() and api_key.startswith("sk-"):
@@ -244,17 +249,8 @@ class OAuth2GmailCrewAi:
         # Model and API key setup complete
         
         try:
-            # Handle DO AI custom endpoint
-            if "do-ai" in model.lower():
-                # For DO AI, we need to use a custom base URL with openai/ prefix
-                llm_instance = LLM(
-                    model="openai/gpt-4", # Use openai prefix for custom endpoints
-                    api_key=api_key,
-                    base_url="https://qbzliijukm26wurykp3itmoq.agents.do-ai.run",
-                    custom_llm_provider="openai"  # Specify provider for custom endpoint
-                )
-            else:
-                llm_instance = LLM(model=model, api_key=api_key)
+            # Create LLM instance
+            llm_instance = LLM(model=model, api_key=api_key)
             pass  # LLM instance created
             
             # Test the API key by making a simple completion request
@@ -267,6 +263,17 @@ class OAuth2GmailCrewAi:
                 if "authentication" in error_str.lower() or "invalid x-api-key" in error_str.lower():
                     error_msg = f"API key authentication failed. The {('Anthropic' if 'anthropic' in model.lower() else 'OpenAI')} API key is invalid or expired. Please update your API key."
                     pass  # Error message
+                    raise ValueError(error_msg)
+                elif "rate_limit" in error_str.lower() or "rate limit" in error_str.lower():
+                    # Handle rate limit by switching to fallback model
+                    if "anthropic" in model.lower():
+                        print(f"Rate limit hit for {model}, switching to OpenAI fallback")
+                        model = "openai/gpt-4o-mini"
+                        api_key = get_api_key_with_fallback("openai")
+                        if api_key:
+                            llm_instance = LLM(model=model, api_key=api_key)
+                            return llm_instance
+                    error_msg = f"Rate limit exceeded. Please try again later or switch to a different model."
                     raise ValueError(error_msg)
                 else:
                     # Re-raise other errors
