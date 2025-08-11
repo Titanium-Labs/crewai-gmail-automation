@@ -5703,7 +5703,21 @@ def process_emails_with_filters(user_id: str, oauth_manager):
                                 safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 🏃 Executing CrewAI workflow...")
                                 safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 👥 Agents: Categorizer → Organizer → Response Generator → Cleaner")
                                 
-                                result = crew_instance.kickoff(inputs={'email_limit': filters['max_emails']})
+                                inputs = {'email_limit': filters['max_emails']}
+                                result = crew_instance.kickoff(inputs=inputs)
+                                
+                                # Mark processed emails as complete in tracker
+                                if hasattr(crew, 'email_tracker') and crew.email_tracker:
+                                    if 'processed_email_ids' in inputs:
+                                        crew.email_tracker.mark_batch_as_processed(
+                                            inputs['processed_email_ids'],
+                                            metadata={'session_id': st.session_state.get('session_id', 'unknown')}
+                                        )
+                                        safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 📝 Marked {len(inputs['processed_email_ids'])} emails as processed")
+                                        
+                                        # Show tracker statistics
+                                        stats = crew.email_tracker.get_statistics()
+                                        safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] 📊 Total tracked: {stats['total_tracked']}, Duplicates avoided: {stats['duplicates_skipped']}")
                                 
                                 # Add completion messages
                                 safe_add_activity_log(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ CrewAI execution completed successfully!")

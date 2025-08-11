@@ -112,15 +112,38 @@ response_task:
     - thread_info.is_unread = if email is unread
     - thread_info.has_attachment = if email has attachments
     
-    Generate responses for emails meeting ANY of these criteria:
-    - STARRED emails (thread_info.is_starred = true, any category except YOUTUBE)
-    - IMPORTANT emails marked by Gmail (thread_info.is_important = true, any category except YOUTUBE)
-    - UNREAD emails that are PERSONAL with HIGH or MEDIUM priority
-    - PERSONAL emails with HIGH or MEDIUM priority
-    - IMPORTANT category emails with HIGH or MEDIUM priority (business/work emails)
-    - Any email with has_attachment=true that appears to need acknowledgment or response
-    - Any email marked as HIGH priority that appears to need a response
-    - DO NOT generate responses for ANY YouTube emails - the user will respond directly on YouTube instead
+    STEP 1: DETERMINE IF REPLY IS NEEDED
+    For each email, use the following logic to determine the action:
+    
+    **EMAILS THAT NEED REPLIES (use reply-all):**
+    - PERSONAL emails that ask questions or request action
+    - IMPORTANT category emails requiring business response
+    - Emails with direct questions or requests for information
+    - Emails about meetings, appointments, or scheduling
+    - Customer service or support inquiries
+    - Business proposals or partnership requests
+    - Emails that explicitly request a response
+    - STARRED emails (unless they are newsletters/notifications)
+    
+    **EMAILS THAT DO NOT NEED REPLIES (mark as read only):**
+    - NEWSLETTER emails (any priority) - informational only
+    - PROMOTION emails - marketing/sales content
+    - System notifications from no-reply addresses
+    - Automated confirmations that don't request action
+    - Community update notifications (like Skool)
+    - Marketing webinar announcements
+    - Promotional giveaways
+    - YouTube notifications (user responds on YouTube)
+    - Emails already marked as read
+    - Any email from 'noreply@' addresses
+    
+    **DECISION CRITERIA:**
+    Use reasoning to analyze:
+    1. Is this from a real person expecting a response?
+    2. Does the email contain questions or action items?
+    3. Is this part of an ongoing conversation?
+    4. Is this purely informational/promotional?
+    5. Would a reply add value or is it necessary?
 
 
     For YouTube comments:
@@ -163,13 +186,29 @@ response_task:
       * Current status of any ongoing projects or issues
     - Use this context to craft a more informed, relevant, and personalized response
 
-    STEP 2: Call OAuth2SaveDraftTool with these exact parameters:
-    - recipient: The sender's email address (extract from sender field)
-    - subject: Add "Re: " to the original subject
-    - body: Your personalized response (using user persona information)
-    - in_reply_to: Use the message_id from thread_info (NOT the email_id) for proper threading
-    - thread_id: Use the thread_id from thread_info to ensure reply stays in same thread
-    - references: Use the references from thread_info for complete threading
+    STEP 2: For emails that need replies, you MUST execute the OAuth2SaveDraftTool. 
+    
+    ACTION REQUIRED - Execute this exact tool call for each email needing a reply:
+    Tool: OAuth2SaveDraftTool
+    Parameters:
+      recipient: [extract email address from sender field]
+      subject: [add "Re: " prefix to original subject]
+      body: [your composed reply text]
+      in_reply_to: [use thread_info.message_id]
+      thread_id: [use thread_info.thread_id]
+      references: [use thread_info.references]
+      reply_all: true
+    
+    DO NOT just describe the action - you MUST execute the tool!
+    
+    REQUIRED PARAMETERS:
+    - recipient: Extract email from sender (e.g., "John Doe <john@example.com>" → "john@example.com")
+    - subject: Add "Re: " prefix unless already present
+    - body: Professional, concise response matching Michael's style
+    - in_reply_to: thread_info.message_id
+    - thread_id: thread_info.thread_id
+    - references: thread_info.references
+    - reply_all: true
 
     STEP 3: Verify the tool call was successful by checking the return message
 
@@ -180,15 +219,33 @@ response_task:
     - star: true
     - This ensures emails with draft replies are easily identifiable
 
-    CRITICAL: You must actually call the OAuth2SaveDraftTool for each response. Do not just claim to have saved drafts - actually use the tool.
+    CRITICAL REQUIREMENTS:
+    1. You MUST actually call the OAuth2SaveDraftTool for EVERY email where action_taken is "reply-all"
+    2. Do NOT just describe what you would do - ACTUALLY EXECUTE the tool
+    3. If you determine an email needs a reply, you MUST call OAuth2SaveDraftTool IMMEDIATELY
+    4. NEVER report draft_saved=true without actually calling the tool
+    5. The task is NOT complete until all drafts are actually saved using the tool
+    
+    VERIFICATION STEPS:
+    1. After calling OAuth2SaveDraftTool, check the response
+    2. Only mark draft_saved=true if the tool returns "Successfully saved draft"
+    3. If the tool returns an error, mark draft_saved=false and include the error in your report
 
     Your final answer should be a JSON object with:
-    - emails: Array of email objects with email_id, subject, recipient, response_summary, response_needed (boolean), draft_saved (boolean), and context_researched (boolean)
+    - emails: Array of email objects with:
+      - email_id: The email ID
+      - subject: Email subject
+      - sender: Original sender
+      - category: Email category from categorization
+      - action_taken: "reply-all" or "mark-read-only"
+      - reasoning: Why this action was chosen
+      - response_summary: Summary of draft reply (if created)
+      - draft_saved: Boolean indicating if draft was saved
+      - reply_all_used: Boolean indicating if reply-all was used
     - total_processed: Number of emails processed
-    - responses_generated: Number of responses created
-    - context_searches_performed: Number of contextual searches performed before replies
-    - tool_calls_made: Number of actual OAuth2SaveDraftTool calls made
-    - summary: Brief summary of response generation results including context research
+    - replies_created: Number of reply-all drafts created
+    - marked_read_only: Number of emails marked as read without reply
+    - summary: Brief summary explaining the reasoning for actions taken
   expected_output: >
     A comprehensive response report detailing which emails received draft responses and which were marked as no response needed, with reasoning for each decision.
 

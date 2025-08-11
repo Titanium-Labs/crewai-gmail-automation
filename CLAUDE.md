@@ -73,6 +73,7 @@ The system follows a modular, event-driven architecture with the following layer
 - **Logging & Monitoring Layer**: Multi-file logging with rotation and Streamlit integration
 - **Rate Limiting Layer**: Intelligent API quota management
 - **Multi-User Session Management**: User registration, approval, and admin controls
+- **Email Tracking System**: Prevents duplicate processing with persistent per-user tracking
 
 ### Key Components
 
@@ -80,10 +81,11 @@ The system follows a modular, event-driven architecture with the following layer
    - **Smart LLM Fallback**: Auto-switches between OpenAI, Anthropic, and DO-AI models
    - **Categorizer Agent**: Uses 11 predefined categories (PERSONAL, NEWSLETTER, PROMOTION, RECEIPT, IMPORTANT, YOUTUBE, GITHUB, SPONSORSHIPS, RECRUITMENT, COLD_EMAIL, EVENT_INVITATIONS, SOCIALS)
    - **Organizer Agent**: Applies Gmail labels, stars, and keeps emails in INBOX (never removes INBOX label)
-   - **Response Generator**: Creates contextual draft responses with thread support and user persona matching
+   - **Response Generator**: Creates contextual draft responses with reply-all support and intelligent decision making
    - **Cleaner Agent**: Conservative deletion rules (only deletes promotions >2 days, newsletters >7 days)
    - **Summary Reporter**: Sends processing summary emails to user's inbox
    - **Feedback Processor**: Learns from user feedback and updates system rules
+   - **Email Tracker** (`src/gmail_crew_ai/utils/email_tracker.py`): Prevents duplicate processing with persistent tracking
 
 2. **OAuth2 Manager** (`src/gmail_crew_ai/auth/oauth2_manager.py`)
    - **Comprehensive Scopes**: Gmail read/modify/compose, userinfo, drive readonly, calendar
@@ -132,6 +134,7 @@ The system follows a modular, event-driven architecture with the following layer
 - **`tokens/`**: OAuth2 tokens for authenticated users
 - **`output/`**: Email processing results (JSON)
 - **`logs/`**: Application logs with rotation
+- **`tracking/`**: Email tracking data to prevent duplicate processing
 - **`users.json`**: User registration data
 - **`usage.json`**: Daily usage tracking
 

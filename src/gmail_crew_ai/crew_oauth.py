@@ -20,6 +20,7 @@ try:
         OAuth2EmptyTrashTool
     )
     from .auth.oauth2_manager import OAuth2Manager
+    from .utils.email_tracker import EmailTracker
     OAUTH2_AVAILABLE = True
 except ImportError:
     print("⚠️ OAuth2 tools not available. Please check your setup.")
@@ -28,6 +29,7 @@ except ImportError:
     OAuth2GmailOrganizeTool = None  # type: ignore
     OAuth2GmailDeleteTool = None  # type: ignore
     OAuth2SaveDraftTool = None  # type: ignore
+    EmailTracker = None  # type: ignore
     OAuth2EmptyTrashTool = None  # type: ignore
     OAuth2Manager = None  # type: ignore
     OAUTH2_AVAILABLE = False
@@ -56,6 +58,9 @@ class OAuth2GmailCrewAi:
         
         if not self.user_id:
             raise ValueError("User ID must be provided either as parameter or CURRENT_USER_ID environment variable")
+        
+        # Initialize email tracker for this user
+        self.email_tracker = EmailTracker(self.user_id) if EmailTracker else None
             
         # Silently use OAuth2 authentication
         pass
@@ -116,9 +121,35 @@ class OAuth2GmailCrewAi:
                 # No unread emails found
                 return inputs
 
+            # Filter out already-processed emails if tracker is available
+            emails_to_process = []
+            skipped_count = 0
+            
+            if self.email_tracker:
+                print(f"📊 Checking for previously processed emails...")
+                for subject, sender, body, email_id, thread_info in raw_emails:
+                    if not self.email_tracker.is_processed(email_id):
+                        emails_to_process.append((subject, sender, body, email_id, thread_info))
+                    else:
+                        skipped_count += 1
+                        print(f"⏭️  Skipping already-processed email: {subject[:50]}...")
+                
+                if skipped_count > 0:
+                    print(f"✅ Skipped {skipped_count} previously processed email(s)")
+                    stats = self.email_tracker.get_statistics()
+                    print(f"📈 Total emails tracked: {stats['total_tracked']}, Duplicates skipped: {stats['duplicates_skipped']}")
+            else:
+                emails_to_process = raw_emails
+            
+            if not emails_to_process:
+                print("ℹ️  All fetched emails have been previously processed")
+                return inputs
+
             # Process emails into EmailDetails format
             emails = []
-            for subject, sender, body, email_id, thread_info in raw_emails:
+            processed_ids = []
+            for subject, sender, body, email_id, thread_info in emails_to_process:
+                processed_ids.append(email_id)
                 # Limit body content to optimize token usage (targeting 500-1000 tokens per email)
                 # Keep only first 200 characters which should contain the most important content
                 limited_body = body[:200] + "... [Body truncated for efficiency]" if len(body) > 200 else body
@@ -152,6 +183,9 @@ class OAuth2GmailCrewAi:
             with open('output/fetched_emails.json', 'w', encoding='utf-8') as f:
                 json.dump(emails, f, indent=2, ensure_ascii=False)
 
+            # Store processed email IDs for later tracking
+            inputs['processed_email_ids'] = processed_ids
+            
             # Fetched and saved emails to output/fetched_emails.json
             return inputs
 
@@ -325,7 +359,11 @@ class OAuth2GmailCrewAi:
             backstory=config['backstory'],
             memory=config.get('memory', True),
             tools=[*gmail_tools, search_tool, FileReadTool()],
-            llm=self.llm
+            llm=self.llm,
+            allow_delegation=False,  # Explicitly disable delegation to ensure tools are used directly
+            verbose=True,  # Enable verbose mode to see tool execution
+            max_iter=10,  # Allow more iterations for tool execution
+            max_execution_time=600  # Allow up to 10 minutes for execution
         )
 
     @agent

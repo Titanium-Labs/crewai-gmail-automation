@@ -485,12 +485,14 @@ class OAuth2GmailDeleteTool(OAuth2GmailToolBase):
 
 class OAuth2SaveDraftToolSchema(BaseModel):
     """Schema for OAuth2SaveDraftTool input."""
-    recipient: str = Field(description="Email address of the recipient")
+    recipient: str = Field(description="Email address of the primary recipient (To field)")
     subject: str = Field(description="Subject line of the email")
     body: str = Field(description="Body content of the email")
     in_reply_to: Optional[str] = Field(default=None, description="Message ID this is a reply to")
     thread_id: Optional[str] = Field(default=None, description="Thread ID to add the reply to")
     references: Optional[str] = Field(default=None, description="References header for email threading")
+    cc_recipients: Optional[str] = Field(default=None, description="CC recipients (comma-separated email addresses)")
+    reply_all: Optional[bool] = Field(default=True, description="Whether to reply to all recipients")
 
 class OAuth2SaveDraftTool(OAuth2GmailToolBase):
     """OAuth2 version of the Gmail draft saver tool."""
@@ -510,15 +512,34 @@ class OAuth2SaveDraftTool(OAuth2GmailToolBase):
     def _run(self, recipient: str, subject: str, body: str, 
              in_reply_to: Optional[str] = None, 
              thread_id: Optional[str] = None,
-             references: Optional[str] = None) -> str:
-        """Save email draft using Gmail API with proper threading support."""
+             references: Optional[str] = None,
+             cc_recipients: Optional[str] = None,
+             reply_all: Optional[bool] = True) -> str:
+        """Save email draft using Gmail API with proper threading and reply-all support."""
+        # Log that the tool was called
+        print(f"🚀 OAuth2SaveDraftTool called for: {recipient}, subject: {subject}, thread_id: {thread_id}")
+        
         try:
             service = self._get_gmail_service()
+            
+            # For reply-all, fetch original email to get all recipients
+            if reply_all and thread_id:
+                try:
+                    # Get the original message to extract all recipients
+                    original_msg = self._get_original_message_recipients(service, thread_id)
+                    if original_msg:
+                        recipient, cc_recipients = original_msg
+                except Exception as e:
+                    print(f"Could not fetch original recipients for reply-all: {e}")
             
             # Create message
             message = MIMEMultipart()
             message['To'] = recipient
             message['Subject'] = subject
+            
+            # Add CC recipients if provided
+            if cc_recipients:
+                message['Cc'] = cc_recipients
             
             # Add threading headers for proper reply threading
             if in_reply_to:
@@ -550,10 +571,97 @@ class OAuth2SaveDraftTool(OAuth2GmailToolBase):
                 body=draft_body
             ).execute()
             
+            print(f"✅ Draft successfully created! ID: {draft['id']}, To: {recipient}, CC: {cc_recipients or 'None'}")
             return f"Successfully saved draft (ID: {draft['id']}) to {recipient} in thread {thread_id or 'new'}"
             
         except Exception as e:
+            print(f"❌ Error saving draft: {str(e)}")
             return f"Error saving draft to {recipient}: {str(e)}"
+    
+    def _get_original_message_recipients(self, service, thread_id: str) -> Optional[Tuple[str, str]]:
+        """Extract all recipients from the original message in a thread for reply-all."""
+        try:
+            # Get the thread to find the original message
+            thread = service.users().threads().get(userId='me', id=thread_id).execute()
+            
+            if not thread.get('messages'):
+                return None
+            
+            # Get the first message in the thread (original email)
+            original_msg = thread['messages'][0]
+            headers = original_msg['payload'].get('headers', [])
+            
+            # Extract sender and recipients
+            from_email = None
+            to_emails = []
+            cc_emails = []
+            
+            # Get current user's email to exclude from reply-all
+            try:
+                profile = service.users().getProfile(userId='me').execute()
+                user_email = profile.get('emailAddress', '').lower()
+            except:
+                user_email = ''
+            
+            for header in headers:
+                name = header['name'].lower()
+                value = header['value']
+                
+                if name == 'from':
+                    # Extract email from "Name <email@domain.com>" format
+                    import re
+                    email_match = re.search(r'<([^>]+)>', value)
+                    if email_match:
+                        from_email = email_match.group(1)
+                    else:
+                        from_email = value
+                elif name == 'to':
+                    # Parse multiple recipients
+                    to_emails.extend(self._parse_email_list(value))
+                elif name == 'cc':
+                    # Parse CC recipients
+                    cc_emails.extend(self._parse_email_list(value))
+            
+            # Build reply-all recipient lists
+            # Primary recipient is the original sender
+            primary_recipient = from_email if from_email else to_emails[0] if to_emails else ''
+            
+            # CC should include all original To and CC recipients except:
+            # 1. The current user
+            # 2. The primary recipient (to avoid duplication)
+            all_cc = []
+            for email in to_emails + cc_emails:
+                email_lower = email.lower()
+                if email_lower != user_email.lower() and email_lower != primary_recipient.lower():
+                    if email not in all_cc:
+                        all_cc.append(email)
+            
+            cc_string = ', '.join(all_cc) if all_cc else None
+            
+            return (primary_recipient, cc_string)
+            
+        except Exception as e:
+            print(f"Error getting original recipients: {e}")
+            return None
+    
+    def _parse_email_list(self, email_string: str) -> List[str]:
+        """Parse a comma-separated list of emails, handling 'Name <email>' format."""
+        import re
+        emails = []
+        
+        # Split by comma
+        parts = email_string.split(',')
+        
+        for part in parts:
+            part = part.strip()
+            # Extract email from "Name <email@domain.com>" format
+            email_match = re.search(r'<([^>]+)>', part)
+            if email_match:
+                emails.append(email_match.group(1))
+            elif '@' in part:
+                emails.append(part)
+        
+        return emails
 
 
 class OAuth2EmptyTrashToolSchema(BaseModel):
