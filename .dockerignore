@@ -84,6 +84,7 @@ output/
 *.json
 !requirements.txt
 !package.json
+!users.json
 
 # Development scripts
 setup*.py

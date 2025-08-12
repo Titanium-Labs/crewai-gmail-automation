@@ -1048,7 +1048,7 @@ class EmailService:
     
     def __init__(self):
         self.approver_email = "articulatedesigns@gmail.com"
-        self.app_url = "http://localhost:8505"  # Default port for Streamlit app
+        self.app_url = os.getenv('OAUTH_REDIRECT_URI', 'http://localhost:8505')
         self.approval_tokens_file = "approval_tokens.json"
         self.ensure_tokens_file()
     

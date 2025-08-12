@@ -62,6 +62,7 @@ RUN mkdir -p /app/data/tokens \
 COPY --chown=appuser:appgroup src/ ./src/
 COPY --chown=appuser:appgroup streamlit_app.py .
 COPY --chown=appuser:appgroup knowledge/ ./knowledge/
+COPY --chown=appuser:appgroup users.json .
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
