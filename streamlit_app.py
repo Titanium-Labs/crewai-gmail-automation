@@ -6360,15 +6360,15 @@ def main():
                             reason = st.session_state.get('pending_primary_reason', 'Primary owner setup')
                             
                             # Create the primary user
-                            new_user_id = user_manager.create_user(
-                                email=authenticated_email,
-                                reason=reason,
-                                is_primary=True
-                            )
-                            
-                            # Auto-approve since this is the primary owner
-                            user_manager.approve_user(new_user_id)
-                            user_manager.update_last_login(new_user_id)
+                            if user_manager.register_user(authenticated_email, ""):
+                                # Get the user ID that was just created
+                                new_user_id, _ = user_manager.get_user_by_email(authenticated_email)
+                                
+                                # Auto-approve since this is the primary owner
+                                user_manager.approve_user(new_user_id)
+                                user_manager.update_last_login(new_user_id)
+                            else:
+                                raise Exception("Failed to register primary user")
                             
                             st.session_state.oauth_result = "success"
                             st.session_state.authenticated_user_id = new_user_id
@@ -6428,17 +6428,17 @@ def main():
                                     st.session_state.authentication_step = 'login'
                             else:
                                 # Create new user registration request
-                                new_user_id = user_manager.create_user(
-                                    email=authenticated_email,
-                                    reason=reason,
-                                    is_primary=False
-                                )
-                                
-                                # Send approval email to primary owner
-                                primary_user = user_manager.get_primary_user()
-                                if primary_user:
-                                    # Here you could send an email notification
-                                    pass
+                                if user_manager.register_user(authenticated_email, ""):
+                                    # Get the user ID that was just created
+                                    new_user_id, _ = user_manager.get_user_by_email(authenticated_email)
+                                    
+                                    # Send approval email to primary owner
+                                    primary_user = user_manager.get_primary_user()
+                                    if primary_user:
+                                        # Here you could send an email notification
+                                        pass
+                                else:
+                                    raise Exception("Failed to register user")
                                 
                                 st.session_state.oauth_result = "success"
                                 st.session_state.oauth_success_message = f"Registration successful! Your request has been sent to the primary owner ({primary_user['email'] if primary_user else 'administrator'}) for approval."
