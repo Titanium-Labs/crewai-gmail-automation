@@ -22,7 +22,9 @@
       "Bash(cp:*)",
       "Bash(timeout 10 streamlit run streamlit_app.py)",
       "Bash(test:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh api:*)"
     ],
     "deny": []
   }
