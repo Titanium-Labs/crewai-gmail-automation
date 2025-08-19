@@ -85,6 +85,8 @@ output/
 !requirements.txt
 !package.json
 !users.json
+!privacy_policy.html
+!registration_requests.json
 
 # Development scripts
 setup*.py

@@ -63,6 +63,8 @@ COPY --chown=appuser:appgroup src/ ./src/
 COPY --chown=appuser:appgroup streamlit_app.py .
 COPY --chown=appuser:appgroup knowledge/ ./knowledge/
 COPY --chown=appuser:appgroup users.json .
+COPY --chown=appuser:appgroup privacy_policy.html .
+COPY --chown=appuser:appgroup registration_requests.json .
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/
