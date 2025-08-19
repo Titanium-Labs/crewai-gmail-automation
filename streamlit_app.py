@@ -1948,10 +1948,12 @@ def show_login_page():
                 st.markdown("---")
                 st.info("💡 After Gmail authentication, your request will be sent to the primary owner for approval.")
     
-    # Footer
+    # Footer with privacy policy link
     st.markdown("""
     <div style="text-align: center; margin-top: 2rem; color: hsl(var(--muted-foreground)); font-size: 0.875rem;">
         Powered by Gmail CrewAI - AI-powered email automation
+        <br>
+        <a href="?page=privacy" style="color: hsl(var(--muted-foreground)); text-decoration: underline;">🔒 Privacy Policy</a>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2642,6 +2644,12 @@ def show_dashboard():
         st.markdown("*AI-powered email management*")
     
     with col3:
+        # Privacy policy link
+        if st.button("🔒 Privacy", key="privacy_btn"):
+            st.query_params["page"] = "privacy"
+            st.rerun()
+        
+        # Logout button
         if st.button("🚪 Logout"):
             # Clear persistent session
             browser_token = session_manager.get_browser_session()
@@ -2687,13 +2695,9 @@ def show_dashboard():
     
     st.markdown("---")
     
-    # Create tabs - admin tab only visible to admin users (removed billing)
-    if is_admin:
-        tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "⚙️ Settings", "👑 Admin Panel"]
-        tabs = st.tabs(tab_names)
-    else:
-        tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "⚙️ Settings"]
-        tabs = st.tabs(tab_names)
+    # Create tabs
+    tab_names = ["📧 Email Processing", "📋 Rules", "📊 Reports", "⚙️ Settings", "👥 Users"]
+    tabs = st.tabs(tab_names)
     
     # Email Processing Tab
     with tabs[0]:
@@ -2711,10 +2715,9 @@ def show_dashboard():
     with tabs[3]:
         show_settings_tab(user_id, oauth_manager)
     
-    # Admin Panel Tab (only for admin users)
-    if is_admin:
-        with tabs[4]:
-            show_admin_panel_tab(user_id, oauth_manager)
+    # Users Tab
+    with tabs[4]:
+        show_users_tab(user_id, oauth_manager)
 
 
 # Removed duplicate function - using the main implementation below
@@ -5276,6 +5279,306 @@ def show_help_tab():
     st.markdown("---")
     st.markdown("###  Support")
     st.markdown("For issues or questions, please check the project documentation or create an issue on GitHub.")
+    
+    # Add privacy policy link
+    st.markdown("---")
+    st.markdown("### 🔒 Privacy & Legal")
+    st.markdown("""
+    - [Privacy Policy](?page=privacy)
+    - [Contact Support](mailto:support@gmailcrewai.com)
+    """)
+
+
+def show_privacy_policy_page():
+    """Show the privacy policy page."""
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1>🔒 Privacy Policy</h1>
+        <p><strong>Gmail CrewAI</strong> | Effective Date: January 2025</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Read the privacy policy HTML content
+    try:
+        with open('privacy_policy.html', 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Extract the content from the body using a more robust approach
+        import re
+        from bs4 import BeautifulSoup
+        
+        try:
+            # Use BeautifulSoup for more reliable HTML parsing
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # Find the container div
+            container = soup.find('div', class_='container')
+            if container:
+                # Get the content and convert to string
+                content = str(container)
+                # Remove the outer container div tags
+                content = re.sub(r'^<div[^>]*class="container"[^>]*>', '', content)
+                content = re.sub(r'</div>$', '', content)
+                
+                # Add some basic styling to ensure content is visible
+                styled_content = f"""
+                <style>
+                .privacy-content {{
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 100%;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .privacy-content h1, .privacy-content h2, .privacy-content h3 {{
+                    color: #2c3e50;
+                    margin-top: 20px;
+                    margin-bottom: 10px;
+                }}
+                .privacy-content p, .privacy-content li {{
+                    margin-bottom: 10px;
+                }}
+                .privacy-content .highlight, .privacy-content .permission-box, 
+                .privacy-content .warning-box, .privacy-content .critical-box {{
+                    background-color: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 15px 0;
+                    border-left: 4px solid #007bff;
+                }}
+                </style>
+                <div class="privacy-content">
+                {content}
+                </div>
+                """
+                
+                # Display the content
+                st.markdown(styled_content, unsafe_allow_html=True)
+            else:
+                # Fallback: try to find body content
+                body = soup.find('body')
+                if body:
+                    st.markdown(str(body), unsafe_allow_html=True)
+                else:
+                    st.error("Could not find container or body content in privacy policy")
+                    
+        except ImportError:
+            # Fallback to regex if BeautifulSoup is not available
+            body_match = re.search(r'<body[^>]*>(.*?)</body>', html_content, re.DOTALL)
+            if body_match:
+                body_content = body_match.group(1)
+                # Try to find container content
+                content_match = re.search(r'<div[^>]*class="container"[^>]*>(.*?)</div>', body_content, re.DOTALL)
+                if content_match:
+                    content = content_match.group(1)
+                    st.markdown(content, unsafe_allow_html=True)
+                else:
+                    st.markdown(body_content, unsafe_allow_html=True)
+            else:
+                st.error("Could not parse privacy policy content")
+        
+        # Alternative approach: Convert HTML to plain text for better visibility
+        try:
+            # Create a simplified version that's more Streamlit-friendly
+            st.markdown("---")
+            st.markdown("### 📄 Alternative View (Simplified)")
+            
+            # Extract text content without HTML tags
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            # Get text content
+            text_content = soup.get_text()
+            
+            # Clean up whitespace
+            lines = (line.strip() for line in text_content.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text_content = '\n'.join(chunk for chunk in chunks if chunk)
+            
+            # Display in a more readable format
+            st.text_area("Privacy Policy Content", text_content, height=600, disabled=True)
+            
+        except Exception as e:
+            st.error(f"Alternative view error: {str(e)}")
+            
+    except FileNotFoundError:
+        st.error("Privacy policy file not found. Please ensure privacy_policy.html exists in the project directory.")
+        st.markdown("""
+        ### Privacy Policy Not Found
+        
+        The privacy policy file (`privacy_policy.html`) was not found in the project directory.
+        Please ensure the file exists and try again.
+        """)
+    except Exception as e:
+        st.error(f"Error reading privacy policy: {str(e)}")
+        st.markdown("""
+        ### Error Loading Privacy Policy
+        
+        There was an error loading the privacy policy content. Please try refreshing the page.
+        """)
+    
+    # Add navigation back to main app
+    st.markdown("---")
+    
+    # Debug section (only show if there are issues)
+    with st.expander("🔧 Debug Information (Click to expand)"):
+        st.write("**Privacy Policy File Status:**")
+        try:
+            with open('privacy_policy.html', 'r', encoding='utf-8') as f:
+                content_length = len(f.read())
+            st.write(f"✅ File found, size: {content_length} characters")
+        except Exception as e:
+            st.write(f"❌ File error: {str(e)}")
+        
+        st.write("**Content Preview:**")
+        try:
+            with open('privacy_policy.html', 'r', encoding='utf-8') as f:
+                preview = f.read()[:500] + "..." if len(f.read()) > 500 else f.read()
+            st.code(preview, language='html')
+        except Exception as e:
+            st.write(f"❌ Preview error: {str(e)}")
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🏠 Back to Gmail CrewAI", type="primary"):
+            st.query_params.clear()
+            st.rerun()
+
+
+def show_users_tab(user_id: str, oauth_manager):
+    """Show users management tab."""
+    from datetime import datetime
+    
+    st.markdown("## 👥 Users Management")
+    st.markdown("*Manage system users and their access*")
+    st.markdown("---")
+    
+    # Load users from users.json
+    try:
+        with open('users.json', 'r') as f:
+            users_data = json.load(f)
+    except FileNotFoundError:
+        st.error("❌ users.json file not found")
+        return
+    except json.JSONDecodeError:
+        st.error("❌ Invalid JSON in users.json file")
+        return
+    
+    # Add user section
+    st.markdown("### ➕ Add New User")
+    
+    with st.container():
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            new_user_email = st.text_input(
+                "Email Address",
+                placeholder="Enter email address",
+                label_visibility="collapsed"
+            )
+        
+        with col2:
+            if st.button("➕ Add User", type="primary"):
+                if new_user_email and new_user_email.strip():
+                    # Generate user ID
+                    user_id_new = f"user_{secrets.token_urlsafe(8)}"
+                    
+                    # Create new user object
+                    new_user = {
+                        "email": new_user_email.strip(),
+                        "status": "approved",
+                        "role": "user",
+                        "created_at": datetime.now().isoformat(),
+                        "approved_at": datetime.now().isoformat(),
+                        "google_id": "",
+                        "last_login": None,
+                        "is_primary": False
+                    }
+                    
+                    # Add to users data
+                    users_data[user_id_new] = new_user
+                    
+                    # Save back to file
+                    try:
+                        with open('users.json', 'w') as f:
+                            json.dump(users_data, f, indent=2)
+                        st.success(f"✅ User {new_user_email} added successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error saving user: {e}")
+                else:
+                    st.error("❌ Please enter a valid email address")
+    
+    st.markdown("---")
+    
+    # Display users table
+    st.markdown("### 📋 Users List")
+    
+    if not users_data:
+        st.info("📝 No users found")
+        return
+    
+    # Display users with delete buttons
+    for user_id_key, user_info in users_data.items():
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([2, 3, 1, 1, 2, 2, 1, 1])
+        
+        with col1:
+            st.write(f"**{user_id_key}**")
+        
+        with col2:
+            st.write(user_info.get("email", ""))
+        
+        with col3:
+            st.write(user_info.get("status", ""))
+        
+        with col4:
+            st.write(user_info.get("role", ""))
+        
+        with col5:
+            created = user_info.get("created_at", "")
+            if created:
+                # Format the date for better display
+                try:
+                    dt = datetime.fromisoformat(created.replace('Z', '+00:00'))
+                    st.write(dt.strftime('%Y-%m-%d'))
+                except:
+                    st.write(created[:10] if len(created) >= 10 else created)
+            else:
+                st.write("")
+        
+        with col6:
+            last_login = user_info.get("last_login", "")
+            if last_login:
+                try:
+                    dt = datetime.fromisoformat(last_login.replace('Z', '+00:00'))
+                    st.write(dt.strftime('%Y-%m-%d'))
+                except:
+                    st.write(last_login[:10] if len(last_login) >= 10 else last_login)
+            else:
+                st.write("Never")
+        
+        with col7:
+            st.write("Yes" if user_info.get("is_primary", False) else "No")
+        
+        with col8:
+            # Only show delete button for non-admin users
+            if user_info.get("role", "") != "admin":
+                if st.button("🗑️", key=f"delete_{user_id_key}"):
+                    # Delete the user immediately
+                    try:
+                        del users_data[user_id_key]
+                        with open('users.json', 'w') as f:
+                            json.dump(users_data, f, indent=2)
+                        st.success(f"✅ User {user_info.get('email', '')} deleted successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error deleting user: {e}")
+            else:
+                st.write("🔒")  # Lock icon for admin users
 
 
 class StreamCapture:
@@ -6185,9 +6488,13 @@ def execute_email_action(user_id: str, oauth_manager: OAuth2Manager, email_row, 
 
 def main():
     """Main Streamlit application."""
+    # Check if we're on the privacy policy page
+    query_params = st.query_params
+    is_privacy_page = 'page' in query_params and query_params['page'] == 'privacy'
+    
     st.set_page_config(
-        page_title="Gmail CrewAI",
-        page_icon="",
+        page_title="Privacy Policy - Gmail CrewAI" if is_privacy_page else "Gmail CrewAI",
+        page_icon="🔒" if is_privacy_page else "",
         layout="wide",
         initial_sidebar_state="expanded"
     )
@@ -6317,6 +6624,11 @@ def main():
             st.error(" Invalid or expired approval link.")
         
         return  # Stop execution here for approval links
+    
+    # Handle privacy policy route
+    if 'page' in query_params and query_params['page'] == 'privacy':
+        show_privacy_policy_page()
+        return
     
     # Handle OAuth callback automatically
     if 'code' in query_params and 'state' in query_params:
